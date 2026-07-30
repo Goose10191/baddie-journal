@@ -55,6 +55,13 @@ const I_DOWN='<svg class="ic" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
 const I_SWAP='<svg class="ic" viewBox="0 0 24 24"><path d="M8 4v16M8 4L5 7M8 4l3 3M16 20V4M16 20l-3-3M16 20l3-3"/></svg>';
 const I_TRASH='<svg class="ic" viewBox="0 0 24 24"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13h10l1-13"/></svg>';
 const I_X='<svg class="ic" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+// Small inline line-icons used inside text (replace emoji)
+const MINI={
+  flame:'<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>',
+  drop:'<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5S12.5 5.5 12 3c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/>',
+  trophy:'<path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.7V17c0 .6-.5 1-1 1.2C7.8 18.8 7 20.2 7 22"/><path d="M14 14.7V17c0 .6.5 1 1 1.2 1.2.6 2 2 2 3.8"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2z"/>',
+};
+function mi(name,cls){ return '<svg class="mi'+(cls?' '+cls:'')+'" viewBox="0 0 24 24" aria-hidden="true">'+MINI[name]+'</svg>'; }
 
 /* ================= State model ================= */
 function uid(p){ return (p||'x') + Math.random().toString(36).slice(2,7) + Date.now().toString(36).slice(-4); }
@@ -197,7 +204,7 @@ function greeting(){
   const hr=new Date().getHours();
   const part=hr<12?'Good morning':hr<18?'Good afternoon':'Good evening';
   const n=firstName();
-  return '<div class="kicker">'+esc(part)+'</div><h1 class="h1 hdr">'+(n?"Let's go, "+esc(n):"Let's go, Baddie")+' 👊</h1>';
+  return '<div class="kicker">'+esc(part)+'</div><h1 class="h1 hdr">'+(n?"Let's go, "+esc(n):"Let's go, Baddie")+'</h1>';
 }
 
 function screenHome(){
@@ -211,13 +218,13 @@ function screenHome(){
     +'<div class="sub mb">'+(a.week?'Week of '+esc(a.week):todayLabel())+' · Bertram Baddies</div>'
     +'<div class="stats mt-s">'
     +'<div class="stat accent"><div class="num">'+done+'<small>/'+plan.days.length+'</small></div><div class="cap">Workouts this week</div></div>'
-    +'<div class="stat"><div class="num">'+streak+'</div><div class="cap">Week streak 🔥</div></div>'
-    +'<div class="stat"><div class="num">'+a.water+'<small>/8</small></div><div class="cap">Water today 💧</div></div>'
+    +'<div class="stat"><div class="num">'+streak+'</div><div class="cap">Week streak'+mi('flame','red')+'</div></div>'
+    +'<div class="stat"><div class="num">'+a.water+'<small>/8</small></div><div class="cap">Water today'+mi('drop','red')+'</div></div>'
     +'<div class="stat"><div class="num">'+state.history.length+'</div><div class="cap">Weeks logged</div></div>'
     +'</div>'
     +'<div class="mt"><div class="seclbl">Start a workout</div><div class="segwrap"><div class="segment">'+(segs||'<div class="seg">No days</div>')+'</div></div>'
     +'<button class="btn" data-act="gotoworkout">Open '+(plan.days[state.workoutDay]?esc(plan.days[state.workoutDay].name):'Workout')+' →</button></div>'
-    +'<div class="mt"><div class="seclbl">Water — 8 glasses 💧</div><div class="card"><div class="drops">'+drops+'</div></div></div>'
+    +'<div class="mt"><div class="seclbl">Water — 8 glasses'+mi('drop','red')+'</div><div class="card"><div class="drops">'+drops+'</div></div></div>'
     +'<div class="mt"><div class="seclbl">My goals</div><div class="chips">'+goalChips+'</div></div>';
 }
 
@@ -234,7 +241,7 @@ function logDay(day){
     }).join('');
     return '<div class="excard"><div class="exname"><span class="dot"></span>'+esc(ex.name)+'</div><div class="rounds">'+rounds+'</div></div>';
   }).join('') : '<div class="empty">No exercises yet. Tap ✎ Edit to add some.</div>';
-  const finisher=day.finisher?'<div class="finisher"><div class="fl">🔥 Finisher</div><div class="ft">'+esc(day.finisher)+'</div></div>':'';
+  const finisher=day.finisher?'<div class="finisher"><div class="fl">'+mi('flame')+' Finisher</div><div class="ft">'+esc(day.finisher)+'</div></div>':'';
   const scale=scaleNums.map(n=>'<div class="sbtn'+(dl.scale===n?' on':'')+'" data-act="scale" data-day="'+day.id+'" data-n="'+n+'">'+n+'</div>').join('');
   const rating=dl.rating||0;
   const stars=[1,2,3,4,5].map(n=>'<div class="star'+(n<=rating?' on':'')+'" data-act="rating" data-day="'+day.id+'" data-n="'+n+'">★</div>').join('');
@@ -295,12 +302,12 @@ function screenProgress(){
     const dt=w.archivedAt?monthDay(new Date(w.archivedAt)):''; const ar=avgRating(w); const wd=workoutsDone(w);
     const rtxt=ar!=null?'★ '+ar.toFixed(1):wd+' workout'+(wd===1?'':'s');
     return '<div class="hcard" data-act="viewweek" data-id="'+esc(w.id)+'"><div class="hl"><div class="hw">'+esc(w.week||'Week')+'</div><div class="hd">'+wd+' workout'+(wd===1?'':'s')+(dt?' · saved '+esc(dt):'')+'</div></div><div class="hr">'+esc(rtxt)+'</div><svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 6l6 6-6 6"/></svg></div>';
-  }).join('') : '<div class="empty">No past weeks yet.<br>Finish your current week on the <b class="spark">Me</b> tab to save it here. 💪</div>';
-  return '<div class="kicker">Track your progress</div><h1 class="h1 hdr">Progress</h1><div class="sub mb">See how strong you’re getting 📈</div>'
+  }).join('') : '<div class="empty">No past weeks yet.<br>Finish your current week on the <b class="spark">Me</b> tab to save it here.</div>';
+  return '<div class="kicker">Track your progress</div><h1 class="h1 hdr">Progress</h1><div class="sub mb">See how strong you’re getting</div>'
     +'<div class="stats mt-s">'
     +'<div class="stat accent"><div class="num">'+state.history.length+'</div><div class="cap">Weeks completed</div></div>'
     +'<div class="stat"><div class="num">'+totalWorkouts+'</div><div class="cap">Total workouts</div></div>'
-    +'<div class="stat"><div class="num">'+streak+'</div><div class="cap">Week streak 🔥</div></div>'
+    +'<div class="stat"><div class="num">'+streak+'</div><div class="cap">Week streak'+mi('flame','red')+'</div></div>'
     +'<div class="stat"><div class="num">'+(avgAll!=null?avgAll.toFixed(1):'—')+'</div><div class="cap">Avg rating ★</div></div></div>'
     +'<div class="card pad-lg mt"><div class="charthead"><div class="seclbl" style="margin:0;">Top set — weight</div></div><select class="selex" data-act="chartsel">'+options+'</select>'+lineChart(topSeries,{fmt:v=>v+' lb'})+'</div>'
     +'<div class="card pad-lg mt"><div class="charthead"><div class="seclbl" style="margin:0;">Workout rating</div></div>'+lineChart(ratingSeries,{fmt:v=>'★'+v.toFixed(1)})+'</div>'
@@ -328,9 +335,9 @@ function screenWeekDetail(id){
   }).join('');
   const meta=[];
   if(w.weight&&String(w.weight).trim()) meta.push('<div class="rocell"><div class="k">Bodyweight</div><div class="v">'+esc(w.weight)+'</div></div>');
-  meta.push('<div class="rocell"><div class="k">Water</div><div class="v">'+(w.water||0)+'/8 💧</div></div>');
+  meta.push('<div class="rocell"><div class="k">Water</div><div class="v">'+(w.water||0)+'/8'+mi('drop','red')+'</div></div>');
   meta.push('<div class="rocell"><div class="k">Workouts</div><div class="v">'+workoutsDone(w)+'/'+w.plan.days.length+'</div></div>');
-  const wins=(w.wins&&w.wins.length)?'<div class="ro"><div class="rot">Weekly Wins 🏆</div><div class="chips" style="margin-top:6px;">'+w.wins.map(x=>'<div class="chip on">'+esc(x)+'</div>').join('')+'</div>'+(w.note&&w.note.trim()?'<div class="romini" style="margin-top:10px;">“'+esc(w.note)+'”</div>':'')+'</div>':'';
+  const wins=(w.wins&&w.wins.length)?'<div class="ro"><div class="rot">Weekly Wins'+mi('trophy','red')+'</div><div class="chips" style="margin-top:6px;">'+w.wins.map(x=>'<div class="chip on">'+esc(x)+'</div>').join('')+'</div>'+(w.note&&w.note.trim()?'<div class="romini" style="margin-top:10px;">“'+esc(w.note)+'”</div>':'')+'</div>':'';
   const score=(w.score&&w.score.length)?'<div class="ro"><div class="rot">Baddie Score</div><div class="chips" style="margin-top:6px;">'+w.score.map(x=>'<div class="chip on">'+esc(x)+'</div>').join('')+'</div></div>':'';
   const prs=(w.prs&&w.prs.some(p=>String(p).trim()))?'<div class="ro"><div class="rot">Records</div><div class="rogrid" style="margin-top:6px;">'+PR_LABELS.map((l,i)=>String(w.prs[i]||'').trim()?'<div class="rocell"><div class="k">'+esc(l)+'</div><div class="v">'+esc(w.prs[i])+'</div></div>':'').join('')+'</div></div>':'';
   return '<button class="backbtn" data-act="backhist"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 6l-6 6 6 6"/></svg> Back to progress</button>'
@@ -343,17 +350,17 @@ function screenWins(){
   const a=state.active;
   const wins=WINS.map(w=>'<div class="toggle'+(a.wins.includes(w)?' on':'')+'" data-act="win" data-val="'+esc(w)+'"><div class="tick">'+CHECK+'</div><div class="name">'+esc(w)+'</div></div>').join('');
   const score=SCORE_ITEMS.map(it=>'<div class="toggle'+(a.score.includes(it)?' on':'')+'" data-act="score" data-val="'+esc(it)+'"><div class="tick round">'+CHECK+'</div><div class="name">'+esc(it)+'</div></div>').join('');
-  return '<div class="kicker">This week I...</div><h1 class="h1 hdr">Weekly Wins</h1><div class="sub mb">Celebrate every one 🏆</div>'
+  return '<div class="kicker">This week I...</div><h1 class="h1 hdr">Weekly Wins</h1><div class="sub mb">Celebrate every one</div>'
     +'<div class="stack mt-s">'+wins+'</div>'
     +'<div class="mt"><div class="seclbl">A note to myself</div><textarea class="ta" data-note rows="4" placeholder="Write something...">'+esc(a.note)+'</textarea></div>'
-    +'<div class="mt"><div class="seclbl">Baddie Score — tap all that are true 💪</div><div class="stack">'+score+'</div></div>';
+    +'<div class="mt"><div class="seclbl">Baddie Score — tap all that are true</div><div class="stack">'+score+'</div></div>';
 }
 
 function screenMe(){
   const a=state.active;
   const goals=GOALS.map(g=>'<div class="chip'+(state.profile.goals.includes(g)?' on':'')+'" data-act="goal" data-val="'+esc(g)+'">'+esc(g)+'</div>').join('');
   const prs=PR_LABELS.map((label,i)=>'<div class="field"><div class="cap">'+esc(label)+'</div><input class="input sm" data-pr="'+i+'" value="'+esc(a.prs[i]||'')+'" placeholder="—"></div>').join('');
-  return '<div class="kicker">My Baddie Profile</div><h1 class="h1 hdr">Me</h1><div class="sub mb">'+state.history.length+' week'+(state.history.length===1?'':'s')+' in the books 📓</div>'
+  return '<div class="kicker">My Baddie Profile</div><h1 class="h1 hdr">Me</h1><div class="sub mb">'+state.history.length+' week'+(state.history.length===1?'':'s')+' in the books</div>'
     +'<div class="fields mt-s"><div class="field"><div class="cap">Name</div><input class="input" data-prof="name" value="'+esc(state.profile.name)+'" placeholder="Your name"></div>'
     +'<div class="row"><div class="field"><div class="cap">Week of</div><input class="input sm" data-active="week" value="'+esc(a.week)+'" placeholder="'+esc(todayLabel())+'"></div>'
     +'<div class="field"><div class="cap">Bodyweight</div><input class="input sm" data-active="weight" inputmode="decimal" value="'+esc(a.weight)+'" placeholder="—"></div></div></div>'

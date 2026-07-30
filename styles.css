@@ -110,6 +110,8 @@ input::placeholder,textarea::placeholder{color:var(--faint);}
 .iconbtn:disabled{opacity:.3;}
 .iconbtn.danger{color:var(--red2);border-color:var(--red-dim);}
 .ic{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;}
+.mi{width:1em;height:1em;display:inline-block;vertical-align:-0.12em;margin:0 2px;stroke:currentColor;fill:none;stroke-width:2.1;stroke-linecap:round;stroke-linejoin:round;}
+.mi.red{stroke:var(--red2);}
 
 .daymeta .row{align-items:flex-end;}
 .stepper{display:flex;align-items:center;border:1px solid var(--border2);border-radius:12px;overflow:hidden;height:48px;}
