@@ -252,6 +252,8 @@ function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'
 const el=document.getElementById.bind(document);
 function monthDay(d){ return d.toLocaleDateString('en-US',{month:'short',day:'numeric'}); }
 function todayLabel(){ return monthDay(new Date()); }
+function startOfWeek(d){ const x=new Date(d); x.setDate(x.getDate()-x.getDay()); x.setHours(0,0,0,0); return x; } // week starts Sunday
+function currentWeekLabel(){ return monthDay(startOfWeek(new Date())); }
 function firstName(){ const n=(state.profile.name||'').trim(); return n?n.split(/\s+/)[0]:''; }
 
 /* ================= Charts ================= */
@@ -447,7 +449,7 @@ function screenMe(){
   return '<div class="kicker">My Baddie Profile</div><h1 class="h1 hdr">Me</h1><div class="sub mb">'+state.history.length+' week'+(state.history.length===1?'':'s')+' in the books</div>'
     +avatarBlock
     +'<div class="fields"><div class="field"><div class="cap">Name</div><input class="input" data-prof="name" value="'+esc(state.profile.name)+'" placeholder="Your name"></div>'
-    +'<div class="row"><div class="field"><div class="cap">Week of</div><input class="input sm" data-active="week" value="'+esc(a.week)+'" placeholder="'+esc(todayLabel())+'"></div>'
+    +'<div class="row"><div class="field"><div class="cap">Week of</div><div class="input sm readonly">'+esc(a.week||currentWeekLabel())+'<span class="autotag">Auto</span></div></div>'
     +'<div class="field"><div class="cap">Bodyweight</div><input class="input sm" data-active="weight" inputmode="decimal" value="'+esc(a.weight)+'" placeholder="—"></div></div></div>'
     +'<div class="mt"><div class="seclbl">My goals — tap all that apply</div><div class="chips">'+goals+'</div></div>'
     +'<div class="mt"><div class="seclbl">Personal Records</div><div class="fields">'+prs+'</div></div>'
@@ -557,7 +559,7 @@ function finishWeek(){
     plan:JSON.parse(JSON.stringify(state.plan)), log:compactLog(a.log, state.plan),
     weight:a.weight, water:a.water, wins:a.wins.slice(), note:a.note, prs:a.prs.slice(), score:a.score.slice(), coachNotes:a.coachNotes };
   state.history.unshift(snap);
-  const fresh=freshActive(); fresh.weight=a.weight; fresh.prs=a.prs.slice();
+  const fresh=freshActive(); fresh.weight=a.weight; fresh.prs=a.prs.slice(); fresh.week=currentWeekLabel();
   state.active=fresh; state.tab='progress'; state.viewId=null;
   persist(); render();
 }
@@ -640,6 +642,10 @@ el('nav').addEventListener('click',function(e){
   const t=e.target.closest('[data-nav]'); if(!t) return;
   state.tab=t.dataset.nav; state.viewId=null; state.ui.edit=false; state.ui.picker=null; persist(); render();
 });
+
+// Auto-label the current week. Refreshes to the current week until something is
+// logged, then stays fixed on the week the girl started training.
+if(!hasActivity(activeView()) && state.active.week!==currentWeekLabel()){ state.active.week=currentWeekLabel(); persist(); }
 
 render();
 if('serviceWorker' in navigator){ window.addEventListener('load',function(){ navigator.serviceWorker.register('sw.js').catch(function(){}); }); }
