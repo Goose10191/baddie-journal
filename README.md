@@ -7,16 +7,22 @@ screen as a PWA.
 
 ## Features
 - **Home** — greeting dashboard: workouts this week, week streak, water, weeks logged
-- **Workout** — Day 1 / 2 / 3 (segmented), exercises × rounds, finisher, energy/confidence
-  scale, star rating, reflections
+- **Workout** — days shown as a segmented control; exercises × rounds, finisher,
+  energy/confidence scale, star rating, reflections. **Edit mode** (✎) lets you
+  add / rename / delete days, change rounds, and add / remove / swap / reorder exercises.
+- **Exercise library** — ~96 built-in exercises filterable by **body part** (Legs, Glutes,
+  Calves, Chest, Back, Shoulders, Arms, Core, Full Body, Cardio) and **equipment**
+  (Bodyweight, Dumbbell, Kettlebell, Barbell, Band, Machine, Box, Jump Rope, Other),
+  searchable, plus **custom exercises** with your choice of tracked fields.
 - **Progress** — stat summary + line charts (top-set weight per exercise, workout rating,
-  bodyweight) and a browsable history of every finished week (tap to view, or delete)
+  bodyweight) and a browsable history of every finished week (tap to view, or delete).
+  Each finished week snapshots the plan it used, so history stays accurate after edits.
 - **Wins** — weekly wins checklist, note to self, Baddie Score
 - **Me** — name, week, bodyweight, goals, personal records, coach's notes, and
-  **Finish Week** (archives the week to Progress; name/goals/records/bodyweight carry over)
+  **Finish Week** (archives to Progress; name/goals/records/bodyweight/plan carry over)
 
 ## Files
-- `index.html` — the entire app (HTML + CSS + vanilla JS, no dependencies)
+- `index.html` — HTML shell · `styles.css` — all styles · `app.js` — all logic (vanilla JS, no deps)
 - `manifest.webmanifest`, `sw.js` — PWA metadata + offline cache
 - `assets/logo.png`, `icon-192/512.png`, `apple-touch-icon.png` — logo & app icons
 - `.nojekyll` — tells GitHub Pages to serve files as-is
