@@ -230,6 +230,13 @@ function duplicateDay(dayId){
   state.plan.days.splice(i+1,0,copy);
   state.workoutDay=i+1;
 }
+// Reorder a whole day left/right in the plan (dir -1 = earlier, +1 = later).
+function moveDay(dayId,dir){
+  const days=state.plan.days, i=days.findIndex(d=>d.id===dayId), j=i+dir;
+  if(i<0||j<0||j>=days.length) return;
+  const tmp=days[i]; days[i]=days[j]; days[j]=tmp;
+  state.workoutDay=j;
+}
 
 /* ================= Log accessors ================= */
 function dayLog(log,dayId){ if(!log[dayId]) log[dayId]={rating:0,scale:null,reflections:{},ex:{}}; return log[dayId]; }
@@ -359,6 +366,7 @@ function logDay(day){
 
 function editDay(day){
   const conf=day.scaleLabel.includes('Confidence');
+  const idx=state.plan.days.findIndex(d=>d.id===day.id), ndays=state.plan.days.length;
   const exs=day.exercises.map((ex,i)=>'<div class="excard editrow"><div class="exname"><span class="dot"></span><span>'+esc(ex.name)+'</span><span class="extag">'+ex.fields.map(f=>esc(FIELD_LABELS[f])).join(' · ')+'</span></div><div class="exctrl">'
     +'<button class="iconbtn" data-act="exup" data-day="'+day.id+'" data-ex="'+ex.id+'"'+(i===0?' disabled':'')+'>'+I_UP+'</button>'
     +'<button class="iconbtn" data-act="exdown" data-day="'+day.id+'" data-ex="'+ex.id+'"'+(i===day.exercises.length-1?' disabled':'')+'>'+I_DOWN+'</button>'
@@ -371,6 +379,10 @@ function editDay(day){
     +'<div class="field mt-s"><div class="cap">Focus</div><input class="input sm" data-dfield="focus" data-dayid="'+day.id+'" value="'+esc(day.focus||'')+'" placeholder="e.g. Legs · Glutes"></div>'
     +'<div class="field mt-s"><div class="cap">Rating scale</div><div class="segment sm"><div class="seg'+(!conf?' on':'')+'" data-act="scaletype" data-dayid="'+day.id+'" data-t="energy">Energy</div><div class="seg'+(conf?' on':'')+'" data-act="scaletype" data-dayid="'+day.id+'" data-t="confidence">Confidence</div></div></div>'
     +'<div class="field mt-s"><div class="cap">Finisher (optional)</div><input class="input sm" data-dfield="finisher" data-dayid="'+day.id+'" value="'+esc(day.finisher||'')+'" placeholder="e.g. 15 squats → hold → 15"></div>'
+    +'<div class="field mt-s"><div class="cap">Move day ('+(idx+1)+' of '+ndays+')</div><div class="moverow">'
+    +'<button class="btn ghost sm" data-act="dayleft" data-dayid="'+day.id+'"'+(idx===0?' disabled':'')+'>← Move left</button>'
+    +'<button class="btn ghost sm" data-act="dayright" data-dayid="'+day.id+'"'+(idx===ndays-1?' disabled':'')+'>Move right →</button>'
+    +'</div></div>'
     +'<button class="btn ghost sm mt-s" data-act="dupday" data-dayid="'+day.id+'">Duplicate this day</button>'
     +'<button class="btn danger-ghost sm mt-s" data-act="delday" data-dayid="'+day.id+'">Delete this day</button></div>'
     +'<div class="seclbl mt">Exercises</div><div class="exlist">'+(exs||'<div class="empty">No exercises yet.</div>')+'</div>'
@@ -643,6 +655,8 @@ el('screen').addEventListener('click',function(e){
   else if(act==='rest'){ startRest(+ds.sec); return; }
   else if(act==='toggledone'){ const dl=dayLog(a.log,ds.day); dl.done=!dl.done; }
   else if(act==='dupday'){ duplicateDay(ds.dayid); }
+  else if(act==='dayleft'){ moveDay(ds.dayid,-1); }
+  else if(act==='dayright'){ moveDay(ds.dayid,1); }
   else if(act==='wostart'){ woStart(); render(); return; }
   else if(act==='wopause'){ woPause(); render(); return; }
   else if(act==='wostop'){ woStop(); return; }
