@@ -78,7 +78,7 @@ function freshActive(){ return {week:'',weight:'',water:0,wins:[],note:'',log:{}
 function freshUI(){ return {edit:false,picker:null,fBody:'All',fEquip:'All',q:'',custom:false,customName:'',customFields:[]}; }
 function freshState(){
   return { tab:'home', workoutDay:0, viewId:null, chartName:null, ui:freshUI(),
-    profile:{name:'',goals:[]}, plan:seedPlan(), active:freshActive(), history:[] };
+    profile:{name:'',goals:[],avatar:''}, plan:seedPlan(), active:freshActive(), history:[] };
 }
 
 // Convert an old positional week (days keyed day1.. + parallel scale/ratings/reflections) into id-keyed log.
@@ -99,7 +99,7 @@ function loadState(){
   let v3=null; try{ v3=JSON.parse(localStorage.getItem(STORAGE_KEY)||'null'); }catch(e){}
   if(v3){
     const s=freshState();
-    s.profile={name:(v3.profile&&v3.profile.name)||'', goals:Array.isArray(v3.profile&&v3.profile.goals)?v3.profile.goals:[]};
+    s.profile={name:(v3.profile&&v3.profile.name)||'', goals:Array.isArray(v3.profile&&v3.profile.goals)?v3.profile.goals:[], avatar:(v3.profile&&v3.profile.avatar)||''};
     if(v3.plan&&Array.isArray(v3.plan.days)&&v3.plan.days.length) s.plan=v3.plan;
     s.active={...freshActive(), ...(v3.active||{})};
     s.active.log=(v3.active&&v3.active.log)||{};
@@ -139,6 +139,29 @@ function loadState(){
 
 let state = loadState();
 function persist(){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }catch(e){} }
+
+// Read an image file, center-crop + downscale to a small square, store as data URL.
+function loadAvatar(file){
+  if(!file || !/^image\//.test(file.type)){ alert('Please choose an image file.'); return; }
+  const reader=new FileReader();
+  reader.onload=function(e){
+    const img=new Image();
+    img.onload=function(){
+      const S=256, c=document.createElement('canvas'); c.width=S; c.height=S;
+      const ctx=c.getContext('2d');
+      const scale=Math.max(S/img.width, S/img.height);
+      const w=img.width*scale, h=img.height*scale;
+      ctx.drawImage(img,(S-w)/2,(S-h)/2,w,h);
+      let data; try{ data=c.toDataURL('image/jpeg',0.85); }catch(err){ data=e.target.result; }
+      state.profile.avatar=data;
+      try{ persist(); }catch(err){ alert('That photo was too large to save. Try a smaller one.'); return; }
+      render();
+    };
+    img.onerror=function(){ alert('Could not read that image.'); };
+    img.src=e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
 
 /* ================= Plan mutators ================= */
 function findDay(id){ return state.plan.days.find(d=>d.id===id); }
@@ -360,8 +383,13 @@ function screenMe(){
   const a=state.active;
   const goals=GOALS.map(g=>'<div class="chip'+(state.profile.goals.includes(g)?' on':'')+'" data-act="goal" data-val="'+esc(g)+'">'+esc(g)+'</div>').join('');
   const prs=PR_LABELS.map((label,i)=>'<div class="field"><div class="cap">'+esc(label)+'</div><input class="input sm" data-pr="'+i+'" value="'+esc(a.prs[i]||'')+'" placeholder="—"></div>').join('');
+  const av=state.profile.avatar;
+  const avatarBlock='<div class="avatarrow"><div class="avatarprev'+(av?' has':'')+'"><img src="'+(av?esc(av):'assets/logo.png')+'" alt=""></div>'
+    +'<div class="avatarbtns"><label class="btn ghost sm"><input type="file" accept="image/*" data-avatar hidden>'+(av?'Change photo':'Add photo')+'</label>'
+    +(av?'<button class="btn danger-ghost sm" data-act="rmavatar">Remove photo</button>':'')+'</div></div>';
   return '<div class="kicker">My Baddie Profile</div><h1 class="h1 hdr">Me</h1><div class="sub mb">'+state.history.length+' week'+(state.history.length===1?'':'s')+' in the books</div>'
-    +'<div class="fields mt-s"><div class="field"><div class="cap">Name</div><input class="input" data-prof="name" value="'+esc(state.profile.name)+'" placeholder="Your name"></div>'
+    +avatarBlock
+    +'<div class="fields"><div class="field"><div class="cap">Name</div><input class="input" data-prof="name" value="'+esc(state.profile.name)+'" placeholder="Your name"></div>'
     +'<div class="row"><div class="field"><div class="cap">Week of</div><input class="input sm" data-active="week" value="'+esc(a.week)+'" placeholder="'+esc(todayLabel())+'"></div>'
     +'<div class="field"><div class="cap">Bodyweight</div><input class="input sm" data-active="weight" inputmode="decimal" value="'+esc(a.weight)+'" placeholder="—"></div></div></div>'
     +'<div class="mt"><div class="seclbl">My goals — tap all that apply</div><div class="chips">'+goals+'</div></div>'
@@ -408,7 +436,13 @@ function render(){
   el('topSub').textContent=TOPSUB[state.tab]||'TRAINING JOURNAL';
   scr.innerHTML='<div class="fade">'+SCREENS[state.tab]()+'</div>';
   scr.scrollTop=(state.tab==='progress'&&state.viewId)?0:keep;
-  renderNav(); renderOverlay();
+  renderNav(); renderOverlay(); renderBrand();
+}
+function renderBrand(){
+  const bi=el('brandImg'); if(!bi) return;
+  const av=state.profile.avatar;
+  if(av){ if(bi.getAttribute('src')!==av) bi.src=av; bi.classList.add('avatar'); bi.style.display=''; }
+  else { if(bi.getAttribute('src')!=='assets/logo.png') bi.src='assets/logo.png'; bi.classList.remove('avatar'); }
 }
 
 /* ================= Actions ================= */
@@ -456,12 +490,14 @@ el('screen').addEventListener('click',function(e){
   else if(act==='delweek'){ if(!confirm("Delete this saved week? This can't be undone."))return; state.history=state.history.filter(w=>w.id!==ds.id); state.viewId=null; }
   else if(act==='finish'){ finishWeek(); return; }
   else if(act==='cleardata'){ if(!confirm("Reset the current week without saving it? This can't be undone."))return; state.active=freshActive(); }
+  else if(act==='rmavatar'){ state.profile.avatar=''; }
   else return;
   persist(); render();
 });
 
 el('screen').addEventListener('change',function(e){
   if(e.target.dataset.act==='chartsel'){ state.chartName=e.target.value; persist(); render(); }
+  else if(e.target.dataset.avatar!==undefined){ const f=e.target.files&&e.target.files[0]; if(f) loadAvatar(f); }
 });
 
 el('screen').addEventListener('input',function(e){
