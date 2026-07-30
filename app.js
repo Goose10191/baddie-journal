@@ -138,7 +138,57 @@ function loadState(){
 }
 
 let state = loadState();
-function persist(){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }catch(e){} }
+let quotaWarned=false;
+function persist(){
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); return true; }
+  catch(e){
+    if(!quotaWarned){ quotaWarned=true; alert('Storage for this app is full. Open Me → Export backup to save your data, then delete some old weeks in Progress to free space.'); }
+    return false;
+  }
+}
+function storageBytes(){ try{ return new Blob([localStorage.getItem(STORAGE_KEY)||'']).size; }catch(e){ return (localStorage.getItem(STORAGE_KEY)||'').length; } }
+
+// Drop empty rounds/exercises/days so archived weeks stay small.
+function compactLog(log, plan){
+  const out={};
+  plan.days.forEach(function(d){
+    const dl=log[d.id]; if(!dl) return;
+    const ex={};
+    d.exercises.forEach(function(e){
+      const arr=(dl.ex&&dl.ex[e.id])||[];
+      const rounds=arr.map(function(rd){ if(!rd) return null; const o={}; let any=false; for(const k in rd){ if(String(rd[k]).trim()!==''){ o[k]=rd[k]; any=true; } } return any?o:null; });
+      while(rounds.length && rounds[rounds.length-1]===null) rounds.pop();
+      if(rounds.some(Boolean)) ex[e.id]=rounds;
+    });
+    const refl={}; if(dl.reflections) for(const k in dl.reflections) if(String(dl.reflections[k]).trim()!=='') refl[k]=dl.reflections[k];
+    if((dl.rating>0)||(dl.scale!=null)||Object.keys(ex).length||Object.keys(refl).length)
+      out[d.id]={rating:dl.rating||0, scale:dl.scale!=null?dl.scale:null, reflections:refl, ex:ex};
+  });
+  return out;
+}
+
+function exportData(){
+  try{
+    const blob=new Blob([JSON.stringify(state)],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url; a.download='baddie-journal-backup-'+todayLabel().replace(/[^0-9a-z]+/gi,'-').toLowerCase()+'.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 1500);
+  }catch(e){ alert('Could not create the backup file.'); }
+}
+function importData(file){
+  const r=new FileReader();
+  r.onload=function(e){
+    let data; try{ data=JSON.parse(e.target.result); }catch(err){ alert('That file is not a valid backup.'); return; }
+    if(!data||typeof data!=='object'||!data.plan){ alert('That file is not a valid Baddie Journal backup.'); return; }
+    if(!confirm('Import this backup? It will REPLACE all current data on this device.')) return;
+    try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }catch(err){ alert('Not enough space to import that backup.'); return; }
+    state=loadState(); state.tab='me'; render();
+    alert('Backup imported successfully.');
+  };
+  r.readAsText(file);
+}
 
 // Read an image file, center-crop + downscale to a small square, store as data URL.
 function loadAvatar(file){
@@ -154,7 +204,7 @@ function loadAvatar(file){
       ctx.drawImage(img,(S-w)/2,(S-h)/2,w,h);
       let data; try{ data=c.toDataURL('image/jpeg',0.85); }catch(err){ data=e.target.result; }
       state.profile.avatar=data;
-      try{ persist(); }catch(err){ alert('That photo was too large to save. Try a smaller one.'); return; }
+      if(!persist()){ state.profile.avatar=''; render(); return; }
       render();
     };
     img.onerror=function(){ alert('Could not read that image.'); };
@@ -384,6 +434,8 @@ function screenMe(){
   const goals=GOALS.map(g=>'<div class="chip'+(state.profile.goals.includes(g)?' on':'')+'" data-act="goal" data-val="'+esc(g)+'">'+esc(g)+'</div>').join('');
   const prs=PR_LABELS.map((label,i)=>'<div class="field"><div class="cap">'+esc(label)+'</div><input class="input sm" data-pr="'+i+'" value="'+esc(a.prs[i]||'')+'" placeholder="—"></div>').join('');
   const av=state.profile.avatar;
+  const _b=storageBytes();
+  const storageLine=_b<1024*1024 ? Math.max(1,Math.round(_b/1024))+' KB' : (_b/1048576).toFixed(1)+' MB';
   const avatarBlock='<div class="avatarrow"><div class="avatarprev'+(av?' has':'')+'"><img src="'+(av?esc(av):'assets/logo.png')+'" alt=""></div>'
     +'<div class="avatarbtns"><label class="btn ghost sm"><input type="file" accept="image/*" data-avatar hidden>'+(av?'Change photo':'Add photo')+'</label>'
     +(av?'<button class="btn danger-ghost sm" data-act="rmavatar">Remove photo</button>':'')+'</div></div>';
@@ -397,7 +449,11 @@ function screenMe(){
     +'<div class="mt"><div class="seclbl">Coach’s Notes</div><textarea class="ta" data-coach rows="3" placeholder="Notes from coach...">'+esc(a.coachNotes)+'</textarea></div>'
     +'<div class="divider"></div><div class="seclbl">End of the week?</div><div class="sub" style="margin-bottom:12px;">Save this week to your <b class="spark">Progress</b> history and start fresh. Your name, goals, records, bodyweight &amp; plan carry over.</div>'
     +'<button class="btn" data-act="finish">✓ Finish Week &amp; Save to Progress</button>'
-    +'<button class="btn ghost sm" style="margin-top:10px;" data-act="cleardata">Reset current week (no save)</button>';
+    +'<button class="btn ghost sm" style="margin-top:10px;" data-act="cleardata">Reset current week (no save)</button>'
+    +'<div class="divider"></div><div class="seclbl">Data &amp; backup</div>'
+    +'<div class="sub" style="margin-bottom:12px;">Everything is stored privately on this device. Currently using about <b class="spark">'+storageLine+'</b> (browsers allow ~5 MB). Back up so a browser reset can\'t lose your progress.</div>'
+    +'<button class="btn ghost sm" data-act="export">Export backup (.json)</button>'
+    +'<label class="btn ghost sm" style="margin-top:10px;"><input type="file" accept="application/json,.json" data-import hidden>Import / restore backup</label>';
 }
 
 const SCREENS={home:screenHome,workout:screenWorkout,progress:screenProgress,wins:screenWins,me:screenMe};
@@ -454,7 +510,7 @@ function finishWeek(){
   if(!confirm('Finish this week and save it to Progress? Your name, goals, records, bodyweight and plan carry over; the logged week resets.')) return;
   const a=state.active;
   const snap={ id:uid('w'), archivedAt:new Date().toISOString(), week:a.week||todayLabel(), name:state.profile.name, goals:state.profile.goals.slice(),
-    plan:JSON.parse(JSON.stringify(state.plan)), log:JSON.parse(JSON.stringify(a.log)),
+    plan:JSON.parse(JSON.stringify(state.plan)), log:compactLog(a.log, state.plan),
     weight:a.weight, water:a.water, wins:a.wins.slice(), note:a.note, prs:a.prs.slice(), score:a.score.slice(), coachNotes:a.coachNotes };
   state.history.unshift(snap);
   const fresh=freshActive(); fresh.weight=a.weight; fresh.prs=a.prs.slice();
@@ -491,6 +547,7 @@ el('screen').addEventListener('click',function(e){
   else if(act==='finish'){ finishWeek(); return; }
   else if(act==='cleardata'){ if(!confirm("Reset the current week without saving it? This can't be undone."))return; state.active=freshActive(); }
   else if(act==='rmavatar'){ state.profile.avatar=''; }
+  else if(act==='export'){ exportData(); return; }
   else return;
   persist(); render();
 });
@@ -498,6 +555,7 @@ el('screen').addEventListener('click',function(e){
 el('screen').addEventListener('change',function(e){
   if(e.target.dataset.act==='chartsel'){ state.chartName=e.target.value; persist(); render(); }
   else if(e.target.dataset.avatar!==undefined){ const f=e.target.files&&e.target.files[0]; if(f) loadAvatar(f); }
+  else if(e.target.dataset.import!==undefined){ const f=e.target.files&&e.target.files[0]; if(f) importData(f); }
 });
 
 el('screen').addEventListener('input',function(e){
