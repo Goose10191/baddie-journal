@@ -38,7 +38,7 @@ const LIBRARY = [
   {n:'Hammer Curl',b:'Arms',e:'Dumbbell',f:WR},{n:'Bicep Curl',b:'Arms',e:'Dumbbell',f:WR},{n:'Concentration Curl',b:'Arms',e:'Dumbbell',f:WR},{n:'Band Curl',b:'Arms',e:'Band',f:RP},{n:'Tricep Extension',b:'Arms',e:'Dumbbell',f:WR},{n:'Overhead Tricep Extension',b:'Arms',e:'Dumbbell',f:WR},{n:'Tricep Dips',b:'Arms',e:'Bodyweight',f:RP},{n:'Skull Crushers',b:'Arms',e:'Dumbbell',f:WR},{n:'Tricep Kickback',b:'Arms',e:'Dumbbell',f:WR},
   {n:'Plank',b:'Core',e:'Bodyweight',f:TM},{n:'Side Plank',b:'Core',e:'Bodyweight',f:TM},{n:'Russian Twists',b:'Core',e:'Bodyweight',f:RP},{n:'Bicycle Crunches',b:'Core',e:'Bodyweight',f:RP},{n:'Sit-Ups',b:'Core',e:'Bodyweight',f:RP},{n:'Crunches',b:'Core',e:'Bodyweight',f:RP},{n:'Leg Raises',b:'Core',e:'Bodyweight',f:RP},{n:'Mountain Climbers',b:'Core',e:'Bodyweight',f:TM},{n:'Dead Bug',b:'Core',e:'Bodyweight',f:RP},{n:'Hollow Hold',b:'Core',e:'Bodyweight',f:TM},{n:'Flutter Kicks',b:'Core',e:'Bodyweight',f:TM},{n:'Bear Crawl',b:'Core',e:'Bodyweight',f:TM},{n:'Hanging Knee Raise',b:'Core',e:'Bodyweight',f:RP},{n:'V-Ups',b:'Core',e:'Bodyweight',f:RP},
   {n:'Burpees',b:'Full Body',e:'Bodyweight',f:RP},{n:'Thruster',b:'Full Body',e:'Dumbbell',f:WR},{n:'Clean and Press',b:'Full Body',e:'Kettlebell',f:WR},{n:'Turkish Get-Up',b:'Full Body',e:'Kettlebell',f:WR},{n:'Farmer Carry',b:'Full Body',e:'Dumbbell',f:WD},{n:'Suitcase Carry',b:'Full Body',e:'Dumbbell',f:WD},{n:'Devil Press',b:'Full Body',e:'Dumbbell',f:WR},{n:'Man Maker',b:'Full Body',e:'Dumbbell',f:WR},
-  {n:'Jump Rope',b:'Cardio',e:'Jump Rope',f:TM},{n:'High Knees',b:'Cardio',e:'Bodyweight',f:TM},{n:'Skater Hops',b:'Cardio',e:'Bodyweight',f:RP},{n:'Jumping Jacks',b:'Cardio',e:'Bodyweight',f:TM},{n:'Running',b:'Cardio',e:'Other',f:TD},{n:'Rowing Machine',b:'Cardio',e:'Machine',f:TD},{n:'Stationary Bike',b:'Cardio',e:'Machine',f:TM},{n:'Battle Ropes',b:'Cardio',e:'Other',f:TM},{n:'Sled Push',b:'Cardio',e:'Other',f:DS},
+  {n:'Jump Rope',b:'Cardio',e:'Jump Rope',f:TM},{n:'High Knees',b:'Cardio',e:'Bodyweight',f:TM},{n:'Skater Hops',b:'Cardio',e:'Bodyweight',f:RP},{n:'Jumping Jacks',b:'Cardio',e:'Bodyweight',f:TM},{n:'Run',b:'Cardio',e:'Bodyweight',f:TD},{n:'Walk',b:'Cardio',e:'Bodyweight',f:TD},{n:'Treadmill',b:'Cardio',e:'Machine',f:TD},{n:'Stair Machine',b:'Cardio',e:'Machine',f:TM},{n:'Rowing Machine',b:'Cardio',e:'Machine',f:TD},{n:'Stationary Bike',b:'Cardio',e:'Machine',f:TM},{n:'Battle Ropes',b:'Cardio',e:'Other',f:TM},{n:'Sled Push',b:'Cardio',e:'Other',f:DS},
 ];
 
 const STORAGE_KEY = 'baddieJournalV3';
@@ -348,7 +348,8 @@ function editDay(day){
     +'<div class="field mt-s"><div class="cap">Finisher (optional)</div><input class="input sm" data-dfield="finisher" data-dayid="'+day.id+'" value="'+esc(day.finisher||'')+'" placeholder="e.g. 15 squats → hold → 15"></div>'
     +'<button class="btn danger-ghost sm mt-s" data-act="delday" data-dayid="'+day.id+'">Delete this day</button></div>'
     +'<div class="seclbl mt">Exercises</div><div class="exlist">'+(exs||'<div class="empty">No exercises yet.</div>')+'</div>'
-    +'<button class="btn ghost mt-s" data-act="addex" data-day="'+day.id+'">＋ Add exercise</button>';
+    +'<button class="btn ghost mt-s" data-act="addex" data-day="'+day.id+'">＋ Add exercise</button>'
+    +'<button class="btn ghost mt-s" data-act="addday">＋ Add another day</button>';
 }
 
 function screenWorkout(){
@@ -550,17 +551,22 @@ function stopRest(){ clearInterval(rest.tickId); rest.tickId=null; if(rest.doneH
 /* ================= Actions ================= */
 function openPicker(dayId,mode,exId){ state.ui.picker={dayId,mode,exId:exId||null}; state.ui.q=''; state.ui.custom=false; state.ui.customName=''; state.ui.customFields=[]; }
 
-function finishWeek(){
-  const av=activeView();
-  if(!hasActivity(av)){ alert('Log a workout or two before finishing the week!'); return; }
-  if(!confirm('Finish this week and save it to Progress? Your name, goals, records, bodyweight and plan carry over; the logged week resets.')) return;
+// Snapshot the active week to history and start a fresh one. Used by manual
+// "Finish Week" and by the automatic end-of-week rollover.
+function archiveCurrentWeek(){
   const a=state.active;
-  const snap={ id:uid('w'), archivedAt:new Date().toISOString(), week:a.week||todayLabel(), name:state.profile.name, goals:state.profile.goals.slice(),
+  const snap={ id:uid('w'), archivedAt:new Date().toISOString(), week:a.week||currentWeekLabel(), name:state.profile.name, goals:state.profile.goals.slice(),
     plan:JSON.parse(JSON.stringify(state.plan)), log:compactLog(a.log, state.plan),
     weight:a.weight, water:a.water, wins:a.wins.slice(), note:a.note, prs:a.prs.slice(), score:a.score.slice(), coachNotes:a.coachNotes };
   state.history.unshift(snap);
   const fresh=freshActive(); fresh.weight=a.weight; fresh.prs=a.prs.slice(); fresh.week=currentWeekLabel();
-  state.active=fresh; state.tab='progress'; state.viewId=null;
+  state.active=fresh;
+}
+function finishWeek(){
+  if(!hasActivity(activeView())){ alert('Log a workout or two before finishing the week!'); return; }
+  if(!confirm('Finish this week and save it to Progress? Your name, goals, records, bodyweight and plan carry over; the logged week resets.')) return;
+  archiveCurrentWeek();
+  state.tab='progress'; state.viewId=null;
   persist(); render();
 }
 
@@ -643,9 +649,18 @@ el('nav').addEventListener('click',function(e){
   state.tab=t.dataset.nav; state.viewId=null; state.ui.edit=false; state.ui.picker=null; persist(); render();
 });
 
-// Auto-label the current week. Refreshes to the current week until something is
-// logged, then stays fixed on the week the girl started training.
-if(!hasActivity(activeView()) && state.active.week!==currentWeekLabel()){ state.active.week=currentWeekLabel(); persist(); }
+// Auto week + end-of-week rollover:
+//  - If a new calendar week has begun and the previous week has logged data,
+//    automatically save it to Progress and start a fresh week (no manual "Finish").
+//  - Otherwise just keep the (untouched) current week's label up to date.
+let pendingWeekNotice=false;
+(function weekRollover(){
+  const cur=currentWeekLabel();
+  if(hasActivity(activeView())){
+    if(state.active.week && state.active.week!==cur){ archiveCurrentWeek(); persist(); pendingWeekNotice=true; }
+  } else if(state.active.week!==cur){ state.active.week=cur; persist(); }
+})();
 
 render();
+if(pendingWeekNotice){ setTimeout(function(){ alert("New week started — last week's workouts were saved to your Progress."); }, 400); }
 if('serviceWorker' in navigator){ window.addEventListener('load',function(){ navigator.serviceWorker.register('sw.js').catch(function(){}); }); }
