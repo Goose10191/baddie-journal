@@ -707,7 +707,7 @@ function positionDrag(clientX){
 }
 el('screen').addEventListener('pointerdown',function(e){
   const seg=e.target.closest('.seg[data-dayid]'); if(!seg||dayDrag) return;
-  dayDrag={ seg, container:seg.parentElement, active:false, startX:e.clientX, startY:e.clientY, pid:e.pointerId, grabOffset:0 };
+  dayDrag={ seg, container:seg.parentElement, scrollEl:seg.closest('.segwrap'), active:false, scrolling:false, startX:e.clientX, startY:e.clientY, lastX:e.clientX, pid:e.pointerId, grabOffset:0 };
   dayDrag.timer=setTimeout(function(){
     if(!dayDrag) return;
     dayDrag.active=true;
@@ -720,17 +720,34 @@ el('screen').addEventListener('pointerdown',function(e){
 });
 document.addEventListener('pointermove',function(e){
   if(!dayDrag||dayDrag.pid!==e.pointerId) return;
-  if(!dayDrag.active){
-    if(Math.abs(e.clientX-dayDrag.startX)>16||Math.abs(e.clientY-dayDrag.startY)>16){ clearTimeout(dayDrag.timer); dayDrag=null; }
+  // Drag mode: tab follows finger, reorder siblings
+  if(dayDrag.active){
+    e.preventDefault();
+    positionDrag(e.clientX);
+    const segs=[...dayDrag.container.querySelectorAll('.seg[data-dayid]')], x=e.clientX;
+    for(const s of segs){ if(s===dayDrag.seg) continue; const r=s.getBoundingClientRect();
+      if(x>=r.left&&x<=r.right){ const di=segs.indexOf(dayDrag.seg), ti=segs.indexOf(s);
+        if(ti<di) dayDrag.container.insertBefore(dayDrag.seg,s); else dayDrag.container.insertBefore(dayDrag.seg,s.nextSibling);
+        positionDrag(x); break; }
+    }
     return;
   }
-  e.preventDefault();
-  positionDrag(e.clientX);
-  const segs=[...dayDrag.container.querySelectorAll('.seg[data-dayid]')], x=e.clientX;
-  for(const s of segs){ if(s===dayDrag.seg) continue; const r=s.getBoundingClientRect();
-    if(x>=r.left&&x<=r.right){ const di=segs.indexOf(dayDrag.seg), ti=segs.indexOf(s);
-      if(ti<di) dayDrag.container.insertBefore(dayDrag.seg,s); else dayDrag.container.insertBefore(dayDrag.seg,s.nextSibling);
-      positionDrag(x); break; }
+  // Horizontal swipe: manually scroll the day row
+  if(dayDrag.scrolling){
+    e.preventDefault();
+    if(dayDrag.scrollEl) dayDrag.scrollEl.scrollLeft -= (e.clientX - dayDrag.lastX);
+    dayDrag.lastX=e.clientX;
+    return;
+  }
+  // Undecided: horizontal move => scroll; vertical move => let the page scroll
+  const dx=e.clientX-dayDrag.startX, dy=e.clientY-dayDrag.startY;
+  if(Math.abs(dx)>12||Math.abs(dy)>12){
+    clearTimeout(dayDrag.timer);
+    if(Math.abs(dx)>Math.abs(dy)){
+      dayDrag.scrolling=true;
+      if(dayDrag.scrollEl) dayDrag.scrollEl.scrollLeft -= (e.clientX - dayDrag.lastX);
+      dayDrag.lastX=e.clientX; e.preventDefault();
+    } else { dayDrag=null; }
   }
 },{passive:false});
 function endDayDrag(commit){

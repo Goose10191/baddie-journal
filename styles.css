@@ -88,7 +88,7 @@ input::placeholder,textarea::placeholder{color:var(--faint);}
 .btn.danger-ghost{background:transparent;border:1px solid var(--red-dim);color:var(--red2);box-shadow:none;font-weight:700;}
 .btn.sm{height:44px;font-size:14px;}
 .btn:disabled{opacity:.4;cursor:default;box-shadow:none;filter:none;}
-.seg[data-dayid]{touch-action:none;-webkit-touch-callout:none;}
+.seg[data-dayid]{touch-action:pan-y;-webkit-touch-callout:none;}
 .seg.dragging{opacity:.97;box-shadow:0 10px 26px -8px rgba(0,0,0,.65);z-index:5;position:relative;transition:none;will-change:transform;}
 .draghint{font-size:11px;color:var(--muted2);text-align:center;margin:-6px 0 14px;}
 
