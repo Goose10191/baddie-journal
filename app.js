@@ -712,7 +712,7 @@ el('screen').addEventListener('pointerdown',function(e){
 document.addEventListener('pointermove',function(e){
   if(!dayDrag||dayDrag.pid!==e.pointerId) return;
   if(!dayDrag.active){
-    if(Math.abs(e.clientX-dayDrag.startX)>12||Math.abs(e.clientY-dayDrag.startY)>12){ clearTimeout(dayDrag.timer); dayDrag=null; }
+    if(Math.abs(e.clientX-dayDrag.startX)>16||Math.abs(e.clientY-dayDrag.startY)>16){ clearTimeout(dayDrag.timer); dayDrag=null; }
     return;
   }
   e.preventDefault();
