@@ -163,8 +163,8 @@ function compactLog(log, plan){
       if(rounds.some(Boolean)) ex[e.id]=rounds;
     });
     const refl={}; if(dl.reflections) for(const k in dl.reflections) if(String(dl.reflections[k]).trim()!=='') refl[k]=dl.reflections[k];
-    if((dl.rating>0)||(dl.scale!=null)||Object.keys(ex).length||Object.keys(refl).length)
-      out[d.id]={rating:dl.rating||0, scale:dl.scale!=null?dl.scale:null, reflections:refl, ex:ex};
+    if((dl.rating>0)||(dl.scale!=null)||Object.keys(ex).length||Object.keys(refl).length||dl.done||dl.duration)
+      out[d.id]={rating:dl.rating||0, scale:dl.scale!=null?dl.scale:null, reflections:refl, ex:ex, done:!!dl.done, duration:dl.duration||0};
   });
   return out;
 }
@@ -221,6 +221,15 @@ function addExercise(dayId,name,fields){ const d=findDay(dayId); if(d) d.exercis
 function replaceExercise(dayId,exId,name,fields){ const d=findDay(dayId); const ex=d&&d.exercises.find(e=>e.id===exId); if(ex){ ex.name=name; ex.fields=fields.slice(); } }
 function moveEx(dayId,exId,dir){ const d=findDay(dayId); if(!d)return; const i=d.exercises.findIndex(e=>e.id===exId); const j=i+dir; if(i<0||j<0||j>=d.exercises.length)return; const a=d.exercises; const tmp=a[i]; a[i]=a[j]; a[j]=tmp; }
 function exHasData(dayId,exId){ const dl=state.active.log[dayId]; if(!dl||!dl.ex||!dl.ex[exId])return false; return dl.ex[exId].some(rd=>rd&&Object.keys(rd).some(k=>String(rd[k]).trim()!=='')); }
+// Duplicate a day's plan (exercises get fresh ids, empty log) so a workout can be repeated.
+function duplicateDay(dayId){
+  const i=state.plan.days.findIndex(d=>d.id===dayId); if(i<0)return;
+  const s=state.plan.days[i];
+  const copy={ id:uid('d'), name:s.name+' (copy)', focus:s.focus, rounds:s.rounds, scaleLabel:s.scaleLabel, finisher:s.finisher,
+    reflectionFields:s.reflectionFields.map(r=>({...r})), exercises:s.exercises.map(e=>({id:uid('e'),name:e.name,fields:e.fields.slice()})) };
+  state.plan.days.splice(i+1,0,copy);
+  state.workoutDay=i+1;
+}
 
 /* ================= Log accessors ================= */
 function dayLog(log,dayId){ if(!log[dayId]) log[dayId]={rating:0,scale:null,reflections:{},ex:{}}; return log[dayId]; }
@@ -231,6 +240,7 @@ function num(v){ if(v==null)return null; const n=parseFloat(String(v).replace(/[
 function activeView(){ const a=state.active; return {plan:state.plan, log:a.log, wins:a.wins, score:a.score, note:a.note, coachNotes:a.coachNotes, weight:a.weight, water:a.water, week:a.week, prs:a.prs, name:state.profile.name, goals:state.profile.goals}; }
 function dayHasData(w,dayId){
   const dl=w.log[dayId]; if(!dl)return false;
+  if(dl.done)return true;
   if(dl.rating>0)return true; if(dl.scale!=null)return true;
   if(dl.ex){ for(const k in dl.ex){ for(const rd of dl.ex[k]||[]){ if(rd) for(const f in rd) if(String(rd[f]).trim()!=='')return true; } } }
   if(dl.reflections){ for(const k in dl.reflections) if(String(dl.reflections[k]).trim()!=='')return true; }
@@ -290,7 +300,7 @@ function screenHome(){
   const streak=(function(){let s=0;const t=timeline(true);for(let i=t.length-1;i>=0;i--){if(workoutsDone(t[i].w)>0)s++;else break;}return s;})();
   const drops=Array.from({length:8},(_,i)=>'<div class="drop'+(i<a.water?' on':'')+'" data-act="water" data-i="'+i+'"></div>').join('');
   const goalChips=state.profile.goals.length? state.profile.goals.map(g=>'<div class="chip on">'+esc(g)+'</div>').join('') : '<div class="sub">No goals set yet — add them on the <b class="spark">Me</b> tab.</div>';
-  const segs=plan.days.map((d,i)=>'<div class="seg'+(state.workoutDay===i?' on':'')+'" data-act="day" data-i="'+i+'">'+esc(d.name)+'<span class="sd">'+esc((d.focus||'').split(' · ')[0])+'</span></div>').join('');
+  const segs=plan.days.map((d,i)=>{const dn=state.active.log[d.id]&&state.active.log[d.id].done;return '<div class="seg'+(state.workoutDay===i?' on':'')+(dn?' done':'')+'" data-act="day" data-i="'+i+'">'+esc(d.name)+(dn?'<span class="segchk">'+CHECK+'</span>':'')+'<span class="sd">'+esc((d.focus||'').split(' · ')[0])+'</span></div>';}).join('');
   return greeting()
     +'<div class="sub mb">'+(a.week?'Week of '+esc(a.week):todayLabel())+' · Bertram Baddies</div>'
     +'<div class="stats mt-s">'
@@ -326,10 +336,25 @@ function logDay(day){
   const restLauncher='<div class="card restcard"><div class="restlbl">Rest timer</div><div class="restpresets">'
     +[30,45,60,90,120].map(function(s){return '<button class="restchip" data-act="rest" data-sec="'+s+'">'+restLabel(s)+'</button>';}).join('')
     +'</div></div>';
-  return restLauncher+'<div class="exlist mt-s">'+exs+'</div>'+finisher
+
+  // Workout stopwatch card
+  let woCard;
+  if(wo.running)
+    woCard='<div class="card wocard"><div class="woleft"><div class="wolbl">Workout · running</div><div class="wotime">'+fmtWO(woElapsed())+'</div></div><button class="tbtn" data-act="wopause">Pause</button><button class="tbtn stop" data-act="wostop">Stop</button></div>';
+  else if(wo.elapsedMs>0)
+    woCard='<div class="card wocard"><div class="woleft"><div class="wolbl">Workout · paused</div><div class="wotime">'+fmtWO(woElapsed())+'</div></div><button class="tbtn go" data-act="wostart">Resume</button><button class="tbtn stop" data-act="wostop">Stop</button></div>';
+  else
+    woCard='<div class="card wocard"><div class="woleft"><div class="wolbl">Workout timer</div>'+(dl.duration?'<div class="wolast">Last session: '+fmtWO(dl.duration*1000)+'</div>':'<div class="wolast">Track your session time</div>')+'</div><button class="tbtn go" data-act="wostart">Start workout</button></div>';
+
+  const done=dl.done;
+  const completeBlock=done
+    ? '<button class="btn done-btn mt" data-act="toggledone" data-day="'+day.id+'"><span class="ic-check">'+CHECK+'</span> Workout complete — tap to undo</button>'
+    : '<button class="btn ghost mt" data-act="toggledone" data-day="'+day.id+'">Mark workout complete</button>';
+
+  return woCard+restLauncher+'<div class="exlist mt-s">'+exs+'</div>'+finisher
     +'<div class="mt"><div class="seclbl">'+esc(day.scaleLabel)+'</div><div class="scalerow">'+scale+'</div></div>'
     +'<div class="mt"><div class="seclbl">Workout Rating</div><div class="stars">'+stars+'</div></div>'
-    +'<div class="mt">'+refl+'</div>';
+    +'<div class="mt">'+refl+'</div>'+completeBlock;
 }
 
 function editDay(day){
@@ -346,6 +371,7 @@ function editDay(day){
     +'<div class="field mt-s"><div class="cap">Focus</div><input class="input sm" data-dfield="focus" data-dayid="'+day.id+'" value="'+esc(day.focus||'')+'" placeholder="e.g. Legs · Glutes"></div>'
     +'<div class="field mt-s"><div class="cap">Rating scale</div><div class="segment sm"><div class="seg'+(!conf?' on':'')+'" data-act="scaletype" data-dayid="'+day.id+'" data-t="energy">Energy</div><div class="seg'+(conf?' on':'')+'" data-act="scaletype" data-dayid="'+day.id+'" data-t="confidence">Confidence</div></div></div>'
     +'<div class="field mt-s"><div class="cap">Finisher (optional)</div><input class="input sm" data-dfield="finisher" data-dayid="'+day.id+'" value="'+esc(day.finisher||'')+'" placeholder="e.g. 15 squats → hold → 15"></div>'
+    +'<button class="btn ghost sm mt-s" data-act="dupday" data-dayid="'+day.id+'">Duplicate this day</button>'
     +'<button class="btn danger-ghost sm mt-s" data-act="delday" data-dayid="'+day.id+'">Delete this day</button></div>'
     +'<div class="seclbl mt">Exercises</div><div class="exlist">'+(exs||'<div class="empty">No exercises yet.</div>')+'</div>'
     +'<button class="btn ghost mt-s" data-act="addex" data-day="'+day.id+'">＋ Add exercise</button>'
@@ -355,7 +381,7 @@ function editDay(day){
 function screenWorkout(){
   const plan=state.plan, edit=state.ui.edit;
   if(state.workoutDay>=plan.days.length) state.workoutDay=Math.max(0,plan.days.length-1);
-  const segs=plan.days.map((d,i)=>'<div class="seg'+(state.workoutDay===i?' on':'')+'" data-act="day" data-i="'+i+'">'+esc(d.name)+'<span class="sd">'+esc((d.focus||'').split(' · ')[0])+'</span></div>').join('')+(edit?'<div class="seg add" data-act="addday">＋</div>':'');
+  const segs=plan.days.map((d,i)=>{const dn=state.active.log[d.id]&&state.active.log[d.id].done;return '<div class="seg'+(state.workoutDay===i?' on':'')+(dn?' done':'')+'" data-act="day" data-i="'+i+'">'+esc(d.name)+(dn?'<span class="segchk">'+CHECK+'</span>':'')+'<span class="sd">'+esc((d.focus||'').split(' · ')[0])+'</span></div>';}).join('')+(edit?'<div class="seg add" data-act="addday">＋</div>':'');
   const day=plan.days[state.workoutDay];
   let body;
   if(!day) body='<div class="empty">No workout days yet.<br>Tap <b class="spark">Edit</b> then ＋ to add one.</div>';
@@ -412,7 +438,7 @@ function screenWeekDetail(id){
     }).filter(Boolean).join('');
     const rating=dl.rating||0;
     const refl=day.reflectionFields.map(rf=>{const v=dl.reflections&&dl.reflections[rf.key];return (v&&String(v).trim())?'<div class="romini" style="margin-top:8px;"><b>'+esc(rf.label)+'</b> '+esc(v)+'</div>':'';}).join('');
-    return '<div class="ro"><div class="rot">'+esc(day.name)+(day.focus?' — '+esc(day.focus):'')+'</div><div class="ros">'+'★'.repeat(rating)+'☆'.repeat(5-rating)+(dl.scale!=null?' · '+day.scaleLabel.replace("Today's ","")+' '+dl.scale:'')+'</div><div class="rogrid">'+(rows||'<div class="romini">No sets logged.</div>')+'</div>'+refl+'</div>';
+    return '<div class="ro"><div class="rot">'+esc(day.name)+(day.focus?' — '+esc(day.focus):'')+(dl.done?' <span class="donebadge">Completed</span>':'')+'</div><div class="ros">'+'★'.repeat(rating)+'☆'.repeat(5-rating)+(dl.scale!=null?' · '+day.scaleLabel.replace("Today's ","")+' '+dl.scale:'')+(dl.duration?' · '+fmtWO(dl.duration*1000):'')+'</div><div class="rogrid">'+(rows||'<div class="romini">No sets logged.</div>')+'</div>'+refl+'</div>';
   }).join('');
   const meta=[];
   if(w.weight&&String(w.weight).trim()) meta.push('<div class="rocell"><div class="k">Bodyweight</div><div class="v">'+esc(w.weight)+'</div></div>');
@@ -548,6 +574,20 @@ function addRest(sec){ if(rest.done){ startRest(sec); return; } rest.remaining+=
 function finishRest(){ rest.running=false; rest.done=true; rest.remaining=0; clearInterval(rest.tickId); rest.tickId=null; const el=timerEl(); if(el)el.classList.add('done'); beep(); drawTimer(); rest.doneHide=setTimeout(stopRest,6000); }
 function stopRest(){ clearInterval(rest.tickId); rest.tickId=null; if(rest.doneHide){clearTimeout(rest.doneHide);rest.doneHide=null;} rest.running=false; rest.done=false; const el=timerEl(); if(el) el.classList.remove('show','done'); }
 
+/* ================= Workout stopwatch (counts up; separate from rest countdown) ================= */
+let wo={running:false, elapsedMs:0, startAt:0, tickId:null};
+function woElapsed(){ return wo.running ? (Date.now()-wo.startAt) : wo.elapsedMs; }
+function fmtWO(ms){ const s=Math.floor(ms/1000), h=Math.floor(s/3600), m=Math.floor((s%3600)/60), ss=s%60; const mm=String(m).padStart(2,'0'), sc=String(ss).padStart(2,'0'); return h>0 ? (h+':'+mm+':'+sc) : (m+':'+sc); }
+function woTick(){ const e=document.querySelector('.wotime'); if(e) e.textContent=fmtWO(woElapsed()); }
+function woStart(){ if(wo.running)return; wo.running=true; wo.startAt=Date.now()-wo.elapsedMs; clearInterval(wo.tickId); wo.tickId=setInterval(woTick,500); }
+function woPause(){ if(!wo.running)return; wo.elapsedMs=Date.now()-wo.startAt; wo.running=false; clearInterval(wo.tickId); wo.tickId=null; }
+function woStop(){
+  const ms=woElapsed(); wo.running=false; clearInterval(wo.tickId); wo.tickId=null; wo.elapsedMs=0; wo.startAt=0;
+  const day=state.plan.days[state.workoutDay];
+  if(day && ms>1500){ dayLog(state.active.log, day.id).duration=Math.round(ms/1000); persist(); }
+  render();
+}
+
 /* ================= Actions ================= */
 function openPicker(dayId,mode,exId){ state.ui.picker={dayId,mode,exId:exId||null}; state.ui.q=''; state.ui.custom=false; state.ui.customName=''; state.ui.customFields=[]; }
 
@@ -601,6 +641,11 @@ el('screen').addEventListener('click',function(e){
   else if(act==='rmavatar'){ state.profile.avatar=''; }
   else if(act==='export'){ exportData(); return; }
   else if(act==='rest'){ startRest(+ds.sec); return; }
+  else if(act==='toggledone'){ const dl=dayLog(a.log,ds.day); dl.done=!dl.done; }
+  else if(act==='dupday'){ duplicateDay(ds.dayid); }
+  else if(act==='wostart'){ woStart(); render(); return; }
+  else if(act==='wopause'){ woPause(); render(); return; }
+  else if(act==='wostop'){ woStop(); return; }
   else return;
   persist(); render();
 });
