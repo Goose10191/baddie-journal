@@ -699,14 +699,23 @@ el('nav').addEventListener('click',function(e){
 
 /* ================= Press-and-hold drag to reorder day tabs ================= */
 let dayDrag=null, suppressDayClick=false;
+function positionDrag(clientX){
+  const c=dayDrag.container, cRect=c.getBoundingClientRect();
+  const naturalLeft=cRect.left - c.scrollLeft + dayDrag.seg.offsetLeft;
+  const tx=(clientX - dayDrag.grabOffset) - naturalLeft;
+  dayDrag.seg.style.transform='translateX('+tx+'px) scale(1.04)';
+}
 el('screen').addEventListener('pointerdown',function(e){
   const seg=e.target.closest('.seg[data-dayid]'); if(!seg||dayDrag) return;
-  dayDrag={ seg, container:seg.parentElement, active:false, startX:e.clientX, startY:e.clientY, pid:e.pointerId };
+  dayDrag={ seg, container:seg.parentElement, active:false, startX:e.clientX, startY:e.clientY, pid:e.pointerId, grabOffset:0 };
   dayDrag.timer=setTimeout(function(){
     if(!dayDrag) return;
-    dayDrag.active=true; seg.classList.add('dragging');
+    dayDrag.active=true;
+    dayDrag.grabOffset=dayDrag.startX - seg.getBoundingClientRect().left;
+    seg.classList.add('dragging');
     try{ seg.setPointerCapture(dayDrag.pid); }catch(_){}
     if(navigator.vibrate){ try{ navigator.vibrate(12); }catch(_){} }
+    positionDrag(dayDrag.startX);
   }, 200);
 });
 document.addEventListener('pointermove',function(e){
@@ -716,10 +725,12 @@ document.addEventListener('pointermove',function(e){
     return;
   }
   e.preventDefault();
+  positionDrag(e.clientX);
   const segs=[...dayDrag.container.querySelectorAll('.seg[data-dayid]')], x=e.clientX;
   for(const s of segs){ if(s===dayDrag.seg) continue; const r=s.getBoundingClientRect();
     if(x>=r.left&&x<=r.right){ const di=segs.indexOf(dayDrag.seg), ti=segs.indexOf(s);
-      if(ti<di) dayDrag.container.insertBefore(dayDrag.seg,s); else dayDrag.container.insertBefore(dayDrag.seg,s.nextSibling); break; }
+      if(ti<di) dayDrag.container.insertBefore(dayDrag.seg,s); else dayDrag.container.insertBefore(dayDrag.seg,s.nextSibling);
+      positionDrag(x); break; }
   }
 },{passive:false});
 function endDayDrag(commit){
@@ -728,7 +739,6 @@ function endDayDrag(commit){
   const wasActive=dayDrag.active, container=dayDrag.container, seg=dayDrag.seg;
   dayDrag=null;
   if(!wasActive) return;
-  seg.classList.remove('dragging');
   suppressDayClick=true; setTimeout(function(){ suppressDayClick=false; }, 400);
   if(commit){
     const ids=[...container.querySelectorAll('.seg[data-dayid]')].map(s=>s.dataset.dayid);
@@ -741,7 +751,11 @@ function endDayDrag(commit){
       persist();
     }
   }
-  render();
+  // Relabel tabs in place (no full re-render → no flash) and settle the dragged tab.
+  [...container.querySelectorAll('.seg[data-dayid]')].forEach(function(s,idx){ s.dataset.i=idx; s.classList.toggle('on', idx===state.workoutDay); });
+  seg.style.transition='transform .18s ease';
+  seg.style.transform='';
+  setTimeout(function(){ seg.style.transition=''; seg.style.transform=''; seg.classList.remove('dragging'); }, 200);
 }
 document.addEventListener('pointerup',function(e){ if(dayDrag&&dayDrag.pid===e.pointerId) endDayDrag(true); });
 document.addEventListener('pointercancel',function(e){ if(dayDrag&&dayDrag.pid===e.pointerId) endDayDrag(false); });
