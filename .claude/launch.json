@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "baddie-journal",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["dev-server.js"],
+      "port": 8585
+    }
+  ]
+}
