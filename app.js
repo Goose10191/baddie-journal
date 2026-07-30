@@ -62,6 +62,8 @@ const MINI={
   trophy:'<path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.7V17c0 .6-.5 1-1 1.2C7.8 18.8 7 20.2 7 22"/><path d="M14 14.7V17c0 .6.5 1 1 1.2 1.2.6 2 2 2 3.8"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2z"/>',
 };
 function mi(name,cls){ return '<svg class="mi'+(cls?' '+cls:'')+'" viewBox="0 0 24 24" aria-hidden="true">'+MINI[name]+'</svg>'; }
+const ICON_PAUSE='<svg class="ic" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg>';
+const ICON_PLAY='<svg class="ic" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M8 5l12 7-12 7z"/></svg>';
 
 /* ================= State model ================= */
 function uid(p){ return (p||'x') + Math.random().toString(36).slice(2,7) + Date.now().toString(36).slice(-4); }
@@ -319,7 +321,10 @@ function logDay(day){
   const rating=dl.rating||0;
   const stars=[1,2,3,4,5].map(n=>'<div class="star'+(n<=rating?' on':'')+'" data-act="rating" data-day="'+day.id+'" data-n="'+n+'">★</div>').join('');
   const refl=day.reflectionFields.map(rf=>{const v=(dl.reflections&&dl.reflections[rf.key])||'';return '<div class="mt-s"><div class="reflabel">'+esc(rf.label)+'</div><textarea class="ta sm" rows="2" data-refl data-day="'+day.id+'" data-refkey="'+rf.key+'">'+esc(v)+'</textarea></div>';}).join('');
-  return '<div class="exlist mt-s">'+exs+'</div>'+finisher
+  const restLauncher='<div class="card restcard"><div class="restlbl">Rest timer</div><div class="restpresets">'
+    +[30,45,60,90,120].map(function(s){return '<button class="restchip" data-act="rest" data-sec="'+s+'">'+restLabel(s)+'</button>';}).join('')
+    +'</div></div>';
+  return restLauncher+'<div class="exlist mt-s">'+exs+'</div>'+finisher
     +'<div class="mt"><div class="seclbl">'+esc(day.scaleLabel)+'</div><div class="scalerow">'+scale+'</div></div>'
     +'<div class="mt"><div class="seclbl">Workout Rating</div><div class="stars">'+stars+'</div></div>'
     +'<div class="mt">'+refl+'</div>';
@@ -501,6 +506,45 @@ function renderBrand(){
   else { if(bi.getAttribute('src')!=='assets/logo.png') bi.src='assets/logo.png'; bi.classList.remove('avatar'); }
 }
 
+/* ================= Rest timer (independent of screen re-renders) ================= */
+let rest={total:0,remaining:0,running:false,endAt:0,tickId:null,doneHide:null,done:false};
+let audioCtx=null;
+function fmtT(s){ s=Math.max(0,s|0); return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); }
+function restLabel(s){ return s<60 ? s+'s' : fmtT(s); }
+function timerEl(){ return document.getElementById('timerbar'); }
+function buildTimerBar(){
+  const el=timerEl(); if(!el||el.dataset.built) return;
+  el.dataset.built='1';
+  el.innerHTML='<div class="tprog"></div><div class="trow"><div class="tinfo"><div class="tlabel">REST</div><div class="ttime">0:00</div></div>'
+    +'<button class="tbtn" data-tact="add">+15s</button><button class="iconbtn" data-tact="pause">'+ICON_PAUSE+'</button><button class="iconbtn" data-tact="close">'+I_X+'</button></div>';
+  el.addEventListener('click',function(e){ const b=e.target.closest('[data-tact]'); if(!b)return; const a=b.dataset.tact; if(a==='add')addRest(15); else if(a==='pause')pauseRest(); else if(a==='close')stopRest(); });
+}
+function ensureAudio(){ try{ audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)(); if(audioCtx.state==='suspended')audioCtx.resume(); }catch(e){} }
+function beep(){
+  try{ const c=audioCtx; if(c){ const n=c.currentTime; [0,0.26,0.52].forEach(function(t){ const o=c.createOscillator(),g=c.createGain(); o.type='sine'; o.frequency.value=880; g.gain.setValueAtTime(0.0001,n+t); g.gain.exponentialRampToValueAtTime(0.35,n+t+0.02); g.gain.exponentialRampToValueAtTime(0.0001,n+t+0.2); o.connect(g); g.connect(c.destination); o.start(n+t); o.stop(n+t+0.22); }); } }catch(e){}
+  try{ if(navigator.vibrate) navigator.vibrate([180,90,180]); }catch(e){}
+}
+function drawTimer(){
+  const el=timerEl(); if(!el||!el.classList.contains('show')) return;
+  const tt=el.querySelector('.ttime'); if(tt) tt.textContent=rest.done?'Done':fmtT(rest.remaining);
+  const lb=el.querySelector('.tlabel'); if(lb) lb.textContent=rest.done?'REST COMPLETE':(rest.running?'REST':'PAUSED');
+  const pr=el.querySelector('.tprog'); if(pr) pr.style.width=(rest.total?Math.max(0,Math.min(100,rest.remaining/rest.total*100)):0)+'%';
+  const pb=el.querySelector('[data-tact="pause"]'); if(pb) pb.innerHTML=rest.running?ICON_PAUSE:ICON_PLAY;
+}
+function startRest(sec){
+  buildTimerBar(); ensureAudio();
+  rest.total=sec; rest.remaining=sec; rest.running=true; rest.done=false; rest.endAt=Date.now()+sec*1000;
+  if(rest.doneHide){ clearTimeout(rest.doneHide); rest.doneHide=null; }
+  const el=timerEl(); el.classList.add('show'); el.classList.remove('done');
+  clearInterval(rest.tickId); rest.tickId=setInterval(tickRest,200);
+  drawTimer();
+}
+function tickRest(){ if(rest.running){ rest.remaining=Math.max(0,Math.round((rest.endAt-Date.now())/1000)); if(rest.remaining<=0) finishRest(); } drawTimer(); }
+function pauseRest(){ if(rest.done)return; if(rest.running){ rest.remaining=Math.max(0,Math.round((rest.endAt-Date.now())/1000)); rest.running=false; } else { rest.running=true; rest.endAt=Date.now()+rest.remaining*1000; } drawTimer(); }
+function addRest(sec){ if(rest.done){ startRest(sec); return; } rest.remaining+=sec; rest.total+=sec; if(rest.running) rest.endAt+=sec*1000; drawTimer(); }
+function finishRest(){ rest.running=false; rest.done=true; rest.remaining=0; clearInterval(rest.tickId); rest.tickId=null; const el=timerEl(); if(el)el.classList.add('done'); beep(); drawTimer(); rest.doneHide=setTimeout(stopRest,6000); }
+function stopRest(){ clearInterval(rest.tickId); rest.tickId=null; if(rest.doneHide){clearTimeout(rest.doneHide);rest.doneHide=null;} rest.running=false; rest.done=false; const el=timerEl(); if(el) el.classList.remove('show','done'); }
+
 /* ================= Actions ================= */
 function openPicker(dayId,mode,exId){ state.ui.picker={dayId,mode,exId:exId||null}; state.ui.q=''; state.ui.custom=false; state.ui.customName=''; state.ui.customFields=[]; }
 
@@ -548,6 +592,7 @@ el('screen').addEventListener('click',function(e){
   else if(act==='cleardata'){ if(!confirm("Reset the current week without saving it? This can't be undone."))return; state.active=freshActive(); }
   else if(act==='rmavatar'){ state.profile.avatar=''; }
   else if(act==='export'){ exportData(); return; }
+  else if(act==='rest'){ startRest(+ds.sec); return; }
   else return;
   persist(); render();
 });
