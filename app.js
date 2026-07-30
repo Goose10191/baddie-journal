@@ -441,7 +441,7 @@ function screenMe(){
   const av=state.profile.avatar;
   const _b=storageBytes();
   const storageLine=_b<1024*1024 ? Math.max(1,Math.round(_b/1024))+' KB' : (_b/1048576).toFixed(1)+' MB';
-  const avatarBlock='<div class="avatarrow"><div class="avatarprev'+(av?' has':'')+'"><img src="'+(av?esc(av):'assets/logo.png')+'" alt=""></div>'
+  const avatarBlock='<div class="avatarrow"><div class="avatarprev'+(av?' has':'')+'"><img src="'+(av?esc(av):'assets/shield.png')+'" alt=""></div>'
     +'<div class="avatarbtns"><label class="btn ghost sm"><input type="file" accept="image/*" data-avatar hidden>'+(av?'Change photo':'Add photo')+'</label>'
     +(av?'<button class="btn danger-ghost sm" data-act="rmavatar">Remove photo</button>':'')+'</div></div>';
   return '<div class="kicker">My Baddie Profile</div><h1 class="h1 hdr">Me</h1><div class="sub mb">'+state.history.length+' week'+(state.history.length===1?'':'s')+' in the books</div>'
@@ -503,7 +503,7 @@ function renderBrand(){
   const bi=el('brandImg'); if(!bi) return;
   const av=state.profile.avatar;
   if(av){ if(bi.getAttribute('src')!==av) bi.src=av; bi.classList.add('avatar'); bi.style.display=''; }
-  else { if(bi.getAttribute('src')!=='assets/logo.png') bi.src='assets/logo.png'; bi.classList.remove('avatar'); }
+  else { if(bi.getAttribute('src')!=='assets/shield.png') bi.src='assets/shield.png'; bi.classList.remove('avatar'); }
 }
 
 /* ================= Rest timer (independent of screen re-renders) ================= */

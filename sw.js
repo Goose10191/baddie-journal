@@ -1,12 +1,13 @@
 // Bertram Baddies — offline app-shell cache.
 // Bump CACHE when you change any shell file so devices pick up the update.
-const CACHE = 'baddies-v9';
+const CACHE = 'baddies-v10';
 const SHELL = [
   './',
   './index.html',
   './styles.css',
   './app.js',
   './manifest.webmanifest',
+  './assets/shield.png',
   './assets/logo.png',
   './icon-192.png',
   './icon-512.png',
