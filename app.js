@@ -230,13 +230,6 @@ function duplicateDay(dayId){
   state.plan.days.splice(i+1,0,copy);
   state.workoutDay=i+1;
 }
-// Reorder a whole day left/right in the plan (dir -1 = earlier, +1 = later).
-function moveDay(dayId,dir){
-  const days=state.plan.days, i=days.findIndex(d=>d.id===dayId), j=i+dir;
-  if(i<0||j<0||j>=days.length) return;
-  const tmp=days[i]; days[i]=days[j]; days[j]=tmp;
-  state.workoutDay=j;
-}
 
 /* ================= Log accessors ================= */
 function dayLog(log,dayId){ if(!log[dayId]) log[dayId]={rating:0,scale:null,reflections:{},ex:{}}; return log[dayId]; }
@@ -366,7 +359,6 @@ function logDay(day){
 
 function editDay(day){
   const conf=day.scaleLabel.includes('Confidence');
-  const idx=state.plan.days.findIndex(d=>d.id===day.id), ndays=state.plan.days.length;
   const exs=day.exercises.map((ex,i)=>'<div class="excard editrow"><div class="exname"><span class="dot"></span><span>'+esc(ex.name)+'</span><span class="extag">'+ex.fields.map(f=>esc(FIELD_LABELS[f])).join(' · ')+'</span></div><div class="exctrl">'
     +'<button class="iconbtn" data-act="exup" data-day="'+day.id+'" data-ex="'+ex.id+'"'+(i===0?' disabled':'')+'>'+I_UP+'</button>'
     +'<button class="iconbtn" data-act="exdown" data-day="'+day.id+'" data-ex="'+ex.id+'"'+(i===day.exercises.length-1?' disabled':'')+'>'+I_DOWN+'</button>'
@@ -379,10 +371,6 @@ function editDay(day){
     +'<div class="field mt-s"><div class="cap">Focus</div><input class="input sm" data-dfield="focus" data-dayid="'+day.id+'" value="'+esc(day.focus||'')+'" placeholder="e.g. Legs · Glutes"></div>'
     +'<div class="field mt-s"><div class="cap">Rating scale</div><div class="segment sm"><div class="seg'+(!conf?' on':'')+'" data-act="scaletype" data-dayid="'+day.id+'" data-t="energy">Energy</div><div class="seg'+(conf?' on':'')+'" data-act="scaletype" data-dayid="'+day.id+'" data-t="confidence">Confidence</div></div></div>'
     +'<div class="field mt-s"><div class="cap">Finisher (optional)</div><input class="input sm" data-dfield="finisher" data-dayid="'+day.id+'" value="'+esc(day.finisher||'')+'" placeholder="e.g. 15 squats → hold → 15"></div>'
-    +'<div class="field mt-s"><div class="cap">Move day ('+(idx+1)+' of '+ndays+')</div><div class="moverow">'
-    +'<button class="btn ghost sm" data-act="dayleft" data-dayid="'+day.id+'"'+(idx===0?' disabled':'')+'>← Move left</button>'
-    +'<button class="btn ghost sm" data-act="dayright" data-dayid="'+day.id+'"'+(idx===ndays-1?' disabled':'')+'>Move right →</button>'
-    +'</div></div>'
     +'<button class="btn ghost sm mt-s" data-act="dupday" data-dayid="'+day.id+'">Duplicate this day</button>'
     +'<button class="btn danger-ghost sm mt-s" data-act="delday" data-dayid="'+day.id+'">Delete this day</button></div>'
     +'<div class="seclbl mt">Exercises</div><div class="exlist">'+(exs||'<div class="empty">No exercises yet.</div>')+'</div>'
@@ -393,7 +381,7 @@ function editDay(day){
 function screenWorkout(){
   const plan=state.plan, edit=state.ui.edit;
   if(state.workoutDay>=plan.days.length) state.workoutDay=Math.max(0,plan.days.length-1);
-  const segs=plan.days.map((d,i)=>{const dn=state.active.log[d.id]&&state.active.log[d.id].done;return '<div class="seg'+(state.workoutDay===i?' on':'')+(dn?' done':'')+'" data-act="day" data-i="'+i+'">'+esc(d.name)+(dn?'<span class="segchk">'+CHECK+'</span>':'')+'<span class="sd">'+esc((d.focus||'').split(' · ')[0])+'</span></div>';}).join('')+(edit?'<div class="seg add" data-act="addday">＋</div>':'');
+  const segs=plan.days.map((d,i)=>{const dn=state.active.log[d.id]&&state.active.log[d.id].done;return '<div class="seg'+(state.workoutDay===i?' on':'')+(dn?' done':'')+'" data-act="day" data-i="'+i+'" data-dayid="'+d.id+'">'+esc(d.name)+(dn?'<span class="segchk">'+CHECK+'</span>':'')+'<span class="sd">'+esc((d.focus||'').split(' · ')[0])+'</span></div>';}).join('')+(edit?'<div class="seg add" data-act="addday">＋</div>':'');
   const day=plan.days[state.workoutDay];
   let body;
   if(!day) body='<div class="empty">No workout days yet.<br>Tap <b class="spark">Edit</b> then ＋ to add one.</div>';
@@ -401,7 +389,9 @@ function screenWorkout(){
   return '<div class="wkhead"><div><div class="kicker">'+(edit?'Editing plan':"Today's Workout")+'</div><h1 class="h1 hdr">'+(day?esc(day.name):'Workout')+'</h1></div>'
     +'<button class="editpill'+(edit?' on':'')+'" data-act="toggleedit">'+(edit?'✓ Done':'✎ Edit')+'</button></div>'
     +(day&&!edit?'<div class="sub mb">'+esc(day.focus||'')+'</div>':'')
-    +'<div class="segwrap"><div class="segment">'+segs+'</div></div>'+body;
+    +'<div class="segwrap"><div class="segment">'+segs+'</div></div>'
+    +(edit?'<div class="draghint">Press &amp; hold a day tab to drag it into a new order</div>':'')
+    +body;
 }
 
 function screenProgress(){
@@ -624,6 +614,7 @@ function finishWeek(){
 
 /* ================= Event wiring ================= */
 el('screen').addEventListener('click',function(e){
+  if(suppressDayClick && e.target.closest('.seg[data-dayid]')){ suppressDayClick=false; return; } // ignore the tap that ends a drag
   const t=e.target.closest('[data-act]'); if(!t) return;
   const act=t.dataset.act, ds=t.dataset, a=state.active;
   if(act==='water'){ const i=+ds.i; a.water=a.water===i+1?i:i+1; }
@@ -655,8 +646,6 @@ el('screen').addEventListener('click',function(e){
   else if(act==='rest'){ startRest(+ds.sec); return; }
   else if(act==='toggledone'){ const dl=dayLog(a.log,ds.day); dl.done=!dl.done; }
   else if(act==='dupday'){ duplicateDay(ds.dayid); }
-  else if(act==='dayleft'){ moveDay(ds.dayid,-1); }
-  else if(act==='dayright'){ moveDay(ds.dayid,1); }
   else if(act==='wostart'){ woStart(); render(); return; }
   else if(act==='wopause'){ woPause(); render(); return; }
   else if(act==='wostop'){ woStop(); return; }
@@ -707,6 +696,55 @@ el('nav').addEventListener('click',function(e){
   const t=e.target.closest('[data-nav]'); if(!t) return;
   state.tab=t.dataset.nav; state.viewId=null; state.ui.edit=false; state.ui.picker=null; persist(); render();
 });
+
+/* ================= Press-and-hold drag to reorder day tabs ================= */
+let dayDrag=null, suppressDayClick=false;
+el('screen').addEventListener('pointerdown',function(e){
+  const seg=e.target.closest('.seg[data-dayid]'); if(!seg||dayDrag) return;
+  dayDrag={ seg, container:seg.parentElement, active:false, startX:e.clientX, startY:e.clientY, pid:e.pointerId };
+  dayDrag.timer=setTimeout(function(){
+    if(!dayDrag) return;
+    dayDrag.active=true; seg.classList.add('dragging');
+    try{ seg.setPointerCapture(dayDrag.pid); }catch(_){}
+    if(navigator.vibrate){ try{ navigator.vibrate(12); }catch(_){} }
+  }, 200);
+});
+document.addEventListener('pointermove',function(e){
+  if(!dayDrag||dayDrag.pid!==e.pointerId) return;
+  if(!dayDrag.active){
+    if(Math.abs(e.clientX-dayDrag.startX)>12||Math.abs(e.clientY-dayDrag.startY)>12){ clearTimeout(dayDrag.timer); dayDrag=null; }
+    return;
+  }
+  e.preventDefault();
+  const segs=[...dayDrag.container.querySelectorAll('.seg[data-dayid]')], x=e.clientX;
+  for(const s of segs){ if(s===dayDrag.seg) continue; const r=s.getBoundingClientRect();
+    if(x>=r.left&&x<=r.right){ const di=segs.indexOf(dayDrag.seg), ti=segs.indexOf(s);
+      if(ti<di) dayDrag.container.insertBefore(dayDrag.seg,s); else dayDrag.container.insertBefore(dayDrag.seg,s.nextSibling); break; }
+  }
+},{passive:false});
+function endDayDrag(commit){
+  if(!dayDrag) return;
+  clearTimeout(dayDrag.timer);
+  const wasActive=dayDrag.active, container=dayDrag.container, seg=dayDrag.seg;
+  dayDrag=null;
+  if(!wasActive) return;
+  seg.classList.remove('dragging');
+  suppressDayClick=true; setTimeout(function(){ suppressDayClick=false; }, 400);
+  if(commit){
+    const ids=[...container.querySelectorAll('.seg[data-dayid]')].map(s=>s.dataset.dayid);
+    const byId={}; state.plan.days.forEach(d=>byId[d.id]=d);
+    const reordered=ids.map(id=>byId[id]).filter(Boolean);
+    if(reordered.length===state.plan.days.length){
+      const curId=state.plan.days[state.workoutDay]?state.plan.days[state.workoutDay].id:null;
+      state.plan.days=reordered;
+      if(curId){ const ni=reordered.findIndex(d=>d.id===curId); if(ni>=0) state.workoutDay=ni; }
+      persist();
+    }
+  }
+  render();
+}
+document.addEventListener('pointerup',function(e){ if(dayDrag&&dayDrag.pid===e.pointerId) endDayDrag(true); });
+document.addEventListener('pointercancel',function(e){ if(dayDrag&&dayDrag.pid===e.pointerId) endDayDrag(false); });
 
 // Auto week + end-of-week rollover:
 //  - If a new calendar week has begun and the previous week has logged data,
