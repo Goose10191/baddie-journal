@@ -1,6 +1,6 @@
 // Bertram Baddies — offline app-shell cache.
 // Bump CACHE when you change any shell file so devices pick up the update.
-const CACHE = 'baddies-v20';
+const CACHE = 'baddies-v21';
 const SHELL = [
   './',
   './index.html',
@@ -33,7 +33,7 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return; // let fonts etc. hit the network
   e.respondWith(
-    fetch(req)
+    fetch(req, {cache: 'no-cache'})   // always revalidate with the server so updates land immediately when online
       .then((res) => {
         const copy = res.clone();
         caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
