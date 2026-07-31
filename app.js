@@ -110,7 +110,7 @@ function loadState(){
     s.active.prs=Array.isArray(s.active.prs)?s.active.prs.slice(0,5):['','','','',''];
     while(s.active.prs.length<5) s.active.prs.push('');
     s.history=Array.isArray(v3.history)?v3.history:[];
-    s.tab=['home','workout','progress','wins','me'].includes(v3.tab)?v3.tab:'home';
+    s.tab=['home','workout','progress','me'].includes(v3.tab)?v3.tab:'home';
     s.workoutDay=Number.isInteger(v3.workoutDay)?v3.workoutDay:0;
     s.chartName=v3.chartName||null;
     return s;
@@ -493,7 +493,7 @@ function screenMe(){
 }
 
 const SCREENS={home:screenHome,workout:screenWorkout,progress:screenProgress,wins:screenWins,me:screenMe};
-const NAV=[['home','Home'],['workout','Workout'],['progress','Progress'],['wins','Wins'],['me','Me']];
+const NAV=[['home','Home'],['workout','Workout'],['progress','Progress'],['me','Me']];
 const TOPSUB={home:'TRAINING JOURNAL',workout:"TODAY'S SESSION",progress:'YOUR PROGRESS',wins:'WEEKLY WINS',me:'MY PROFILE'};
 
 function renderNav(){
