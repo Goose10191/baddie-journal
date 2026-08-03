@@ -5,7 +5,7 @@ const GOALS = ['Get Stronger', 'Build Confidence', 'Become More Athletic', 'Impr
 const WINS = ['Lifted heavier', 'Encouraged someone else', 'Did one more rep', 'Tried something new', "Didn't give up", 'Beat one of my records'];
 const SCORE_ITEMS = ['I showed up.', "I didn't quit.", 'I worked hard.', 'I got stronger.', 'I encouraged someone.', 'I believed in myself.', 'I felt like a Baddie.'];
 const PR_LABELS = ['Heaviest Goblet Squat', 'Longest Wall Sit', 'Longest Plank', 'Farmer Carry Weight', 'Biggest Win This Week'];
-const FIELD_LABELS = {wt: 'Lbs', reps: 'Reps', time: 'Time', dist: 'Dist'};
+const FIELD_LABELS = {wt: 'Lbs', reps: 'Reps', time: 'Time', dist: 'Dist', rir: 'RIR', pain: 'Pain'};
 
 // Seed program (used to build the default editable plan)
 const DAY_DEFS = [
@@ -238,6 +238,8 @@ function fieldSyn(f){
   if(['reps','rep','count','number'].indexOf(f)>=0) return 'reps';
   if(['time','secs','seconds','sec','duration','min','mins','hold'].indexOf(f)>=0) return 'time';
   if(['dist','distance','ft','feet','m','meters','yd','yards'].indexOf(f)>=0) return 'dist';
+  if(['rir','rpe','reserve'].indexOf(f)>=0) return 'rir';
+  if(['pain','discomfort','ache'].indexOf(f)>=0) return 'pain';
   return null;
 }
 function libFieldsFor(name){
@@ -246,46 +248,105 @@ function libFieldsFor(name){
   if(!f) f=LIBRARY.find(x=>x.n.toLowerCase().replace(/s$/,'')===n.replace(/s$/,'')); // singular/plural tolerant
   return f?f.f.slice():null;
 }
+// Pull day specs out of any supported shape: array, {days}, {workouts}, {program:{...}}, single day.
+function collectSpecs(data){
+  if(!data) return [];
+  if(Array.isArray(data)) return data;
+  if(Array.isArray(data.days)) return data.days;
+  if(Array.isArray(data.workouts)) return data.workouts;
+  if(data.program) return collectSpecs(data.program);
+  if(data.exercises||data.movements||data.name) return [data];
+  return [];
+}
 function buildDayFromSpec(spec, num){
   spec=spec||{};
   const name=String(spec.name||spec.day||spec.title||('Day '+num)).trim()||('Day '+num);
-  const focus=String(spec.focus||spec.subtitle||spec.target||'');
-  let rounds=parseInt(spec.rounds||spec.sets||3,10); if(!(rounds>=1&&rounds<=8)) rounds=3;
-  const scaleLabel=String(spec.scale||spec.scaleType||'energy').toLowerCase().indexOf('conf')>=0 ? "Today's Confidence" : "Today's Energy";
-  const finisher=String(spec.finisher||'');
+  const focus=String(spec.focus||spec.subtitle||'');
+  let finisher=String(spec.finisher||'');
+  if(spec.finisherDetails&&spec.finisherDetails.duration) finisher=(finisher||String(spec.finisherDetails.exercise||''))+' · '+spec.finisherDetails.duration;
   const list=Array.isArray(spec.exercises)?spec.exercises:(Array.isArray(spec.movements)?spec.movements:[]);
+  let anySets=false;
   const exercises=list.map(function(ex){
-    let exName, track;
-    if(typeof ex==='string'){ exName=ex; track=null; }
-    else if(ex){ exName=String(ex.name||ex.exercise||ex.movement||''); track=ex.track||ex.fields||ex.log||null; }
-    else return null;
-    exName=exName.trim(); if(!exName) return null;
+    let exName, track, sets=null, target='';
+    if(typeof ex==='string'){ exName=ex; }
+    else if(ex){
+      exName=String(ex.name||ex.exercise||ex.movement||''); track=ex.track||ex.fields||ex.log||null; sets=ex.sets;
+      target = ex.target!=null ? String(ex.target)
+        : (Array.isArray(ex.repRange)&&ex.repRange.length>=2 ? (ex.repRange[0]+'–'+ex.repRange[1]+' reps') : '');
+    } else return null;
+    exName=(exName||'').trim(); if(!exName) return null;
     let fields=null;
     if(Array.isArray(track)) fields=track.map(fieldSyn).filter(Boolean);
     else if(typeof track==='string'&&track.trim()) fields=track.split(/[\s,/|]+/).map(fieldSyn).filter(Boolean);
     if(!fields||!fields.length) fields=libFieldsFor(exName)||['wt','reps'];
-    return { id:uid('e'), name:exName, fields:fields };
+    fields=fields.filter(function(v,i){ return fields.indexOf(v)===i; }); // de-dupe
+    let exRounds=null; if(sets!=null){ const n=parseInt(sets,10); if(n>=1&&n<=8){ exRounds=n; anySets=true; } }
+    const o={ id:uid('e'), name:exName, fields:fields };
+    if(exRounds) o.rounds=exRounds;
+    if(target) o.target=target;
+    return o;
   }).filter(Boolean);
+  let rounds=parseInt(spec.rounds||spec.sets||0,10);
+  if(anySets) rounds=Math.max.apply(null, exercises.map(e=>e.rounds||1));
+  if(!(rounds>=1&&rounds<=8)) rounds=3;
+  const scaleLabel=String(spec.scale||spec.scaleType||'').toLowerCase().indexOf('conf')>=0 ? "Today's Confidence" : "Today's Energy";
   return { id:uid('d'), name:name, focus:focus, rounds:rounds, scaleLabel:scaleLabel, finisher:finisher,
     reflectionFields:[{key:'proud',label:"Something I'm Proud Of Today"}], exercises:exercises };
 }
+function finishImport(specs){
+  if(!specs||!specs.length){ alert('No workouts found in that file. See the example format.'); return; }
+  const start=state.plan.days.length;
+  const built=specs.map((s,i)=>buildDayFromSpec(s,start+i+1)).filter(d=>d&&d.exercises.length);
+  if(!built.length){ alert('No valid workouts found. Each day needs a name and at least one exercise.'); return; }
+  state.plan.days=state.plan.days.concat(built);
+  state.workoutDay=start; state.tab='workout'; state.ui.edit=false; state.ui.picker=null;
+  persist(); render();
+  alert('Added '+built.length+' workout'+(built.length===1?'':'s')+' to your plan.');
+}
+// Read all JSON entries out of a .zip (central-directory parse + native inflate).
+async function inflateRaw(u8){
+  const s=new Blob([u8]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+  return new Uint8Array(await new Response(s).arrayBuffer());
+}
+async function readZipJson(buf){
+  const dv=new DataView(buf), bytes=new Uint8Array(buf), td=new TextDecoder();
+  let eocd=-1; for(let i=bytes.length-22;i>=0;i--){ if(dv.getUint32(i,true)===0x06054b50){ eocd=i; break; } }
+  if(eocd<0) throw new Error('bad zip');
+  const count=dv.getUint16(eocd+10,true); let off=dv.getUint32(eocd+16,true);
+  const out=[];
+  for(let n=0;n<count;n++){
+    if(dv.getUint32(off,true)!==0x02014b50) break;
+    const method=dv.getUint16(off+10,true), compSize=dv.getUint32(off+20,true);
+    const nameLen=dv.getUint16(off+28,true), extraLen=dv.getUint16(off+30,true), commentLen=dv.getUint16(off+32,true);
+    const localOff=dv.getUint32(off+42,true);
+    const nm=td.decode(bytes.subarray(off+46,off+46+nameLen));
+    const lNameLen=dv.getUint16(localOff+26,true), lExtraLen=dv.getUint16(localOff+28,true);
+    const start=localOff+30+lNameLen+lExtraLen, comp=bytes.subarray(start,start+compSize);
+    if(/\.json$/i.test(nm)){
+      let data; if(method===0) data=comp; else if(method===8) data=await inflateRaw(comp); else data=null;
+      if(data) out.push(td.decode(data));
+    }
+    off+=46+nameLen+extraLen+commentLen;
+  }
+  return out;
+}
 function importWorkouts(file){
+  const isZip=/\.zip$/i.test(file.name||'')||/zip/.test(file.type||'');
+  if(isZip){
+    if(typeof DecompressionStream==='undefined'){ alert('This browser cannot open .zip files. Please upload a .json file instead (for example the complete pack JSON).'); return; }
+    file.arrayBuffer().then(readZipJson).then(function(texts){
+      const seen={}, specs=[];
+      texts.forEach(function(t){ let d; try{ d=JSON.parse(t); }catch(e){ return; }
+        collectSpecs(d).forEach(function(s){ const k=String((s&&s.name)||'').toLowerCase().trim(); if(k&&seen[k]) return; if(k)seen[k]=1; specs.push(s); });
+      });
+      finishImport(specs);
+    }).catch(function(){ alert('Could not read that .zip. Try uploading a .json file instead.'); });
+    return;
+  }
   const r=new FileReader();
   r.onload=function(e){
     let data; try{ data=JSON.parse(e.target.result); }catch(err){ alert('That file is not valid JSON. Use the example file as a template.'); return; }
-    let specs;
-    if(Array.isArray(data)) specs=data;
-    else if(data&&Array.isArray(data.days)) specs=data.days;
-    else if(data&&Array.isArray(data.workouts)) specs=data.workouts;
-    else if(data&&(data.exercises||data.movements||data.name)) specs=[data];
-    else { alert('No workouts found in that file. It should have a "days" list — see the example file.'); return; }
-    const start=state.plan.days.length;
-    const built=specs.map((s,i)=>buildDayFromSpec(s,start+i+1)).filter(d=>d&&d.exercises.length);
-    if(!built.length){ alert('No valid workouts found. Each day needs a name and at least one exercise.'); return; }
-    state.plan.days=state.plan.days.concat(built);
-    state.workoutDay=start; state.tab='workout'; state.ui.edit=false; state.ui.picker=null;
-    persist(); render();
-    alert('Added '+built.length+' workout'+(built.length===1?'':'s')+' to your plan.');
+    finishImport(collectSpecs(data));
   };
   r.readAsText(file);
 }
@@ -396,14 +457,16 @@ function logDay(day){
   const dl=state.active.log[day.id]||{};
   const scaleNums=day.scaleLabel.includes('Confidence')?[1,2,3,4,5]:[6,7,8,9,10];
   const exs=day.exercises.length? day.exercises.map(ex=>{
-    const rounds=Array.from({length:day.rounds},(_,ri)=>{
+    const rc=ex.rounds||day.rounds;
+    const rounds=Array.from({length:rc},(_,ri)=>{
       const cells=ex.fields.map(fk=>{
         const v=(dl.ex&&dl.ex[ex.id]&&dl.ex[ex.id][ri]&&dl.ex[ex.id][ri][fk])||'';
-        return '<input class="cell" inputmode="decimal" placeholder="'+esc(FIELD_LABELS[fk])+'" data-cell data-day="'+day.id+'" data-ex="'+ex.id+'" data-round="'+ri+'" data-fk="'+fk+'" value="'+esc(v)+'">';
+        return '<input class="cell" inputmode="decimal" placeholder="'+esc(FIELD_LABELS[fk]||fk)+'" data-cell data-day="'+day.id+'" data-ex="'+ex.id+'" data-round="'+ri+'" data-fk="'+fk+'" value="'+esc(v)+'">';
       }).join('');
       return '<div class="round"><div class="rlabel">R'+(ri+1)+'</div>'+cells+'</div>';
     }).join('');
-    return '<div class="excard"><div class="exname"><span class="dot"></span>'+esc(ex.name)+'</div><div class="rounds">'+rounds+'</div></div>';
+    const tgt=ex.target?'<div class="extarget">'+esc(ex.target)+'</div>':'';
+    return '<div class="excard"><div class="exname"><span class="dot"></span>'+esc(ex.name)+'</div>'+tgt+'<div class="rounds">'+rounds+'</div></div>';
   }).join('') : '<div class="empty">No exercises yet. Tap ✎ Edit to add some.</div>';
   const finisher=day.finisher?'<div class="finisher"><div class="fl">'+mi('flame')+' Finisher</div><div class="ft">'+esc(day.finisher)+'</div></div>':'';
   const scale=scaleNums.map(n=>'<div class="sbtn'+(dl.scale===n?' on':'')+'" data-act="scale" data-day="'+day.id+'" data-n="'+n+'">'+n+'</div>').join('');
@@ -454,7 +517,7 @@ function editDay(day){
     +'<button class="btn ghost mt-s" data-act="addex" data-day="'+day.id+'">＋ Add exercise</button>'
     +'<button class="btn ghost mt-s" data-act="addday">＋ Add another day</button>'
     +'<div class="divider"></div><div class="seclbl">Import workouts from a file</div>'
-    +'<label class="btn ghost sm"><input type="file" accept="application/json,.json" data-importwo hidden>Import workout file (.json)</label>'
+    +'<label class="btn ghost sm"><input type="file" accept=".json,.zip,application/json,application/zip" data-importwo hidden>Import workout file (.json or .zip)</label>'
     +'<button class="btn ghost sm mt-s" data-act="wotemplate">Download example file</button>';
 }
 
