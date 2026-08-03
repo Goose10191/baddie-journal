@@ -781,55 +781,39 @@ el('nav').addEventListener('click',function(e){
 
 /* ================= Press-and-hold drag to reorder day tabs ================= */
 let dayDrag=null, suppressDayClick=false;
-function positionDrag(clientX){
-  const c=dayDrag.container, cRect=c.getBoundingClientRect();
-  const naturalLeft=cRect.left - c.scrollLeft + dayDrag.seg.offsetLeft;
-  const tx=(clientX - dayDrag.grabOffset) - naturalLeft;
-  dayDrag.seg.style.transform='translateX('+tx+'px) scale(1.04)';
+function positionDrag(cx,cy){
+  const c=dayDrag.container, r=c.getBoundingClientRect();
+  const nx=r.left - c.scrollLeft + dayDrag.seg.offsetLeft;
+  const ny=r.top - c.scrollTop + dayDrag.seg.offsetTop;
+  dayDrag.seg.style.transform='translate('+((cx-dayDrag.grabX)-nx)+'px,'+((cy-dayDrag.grabY)-ny)+'px) scale(1.04)';
 }
 el('screen').addEventListener('pointerdown',function(e){
   const seg=e.target.closest('.seg[data-dayid]'); if(!seg||dayDrag) return;
-  dayDrag={ seg, container:seg.parentElement, scrollEl:seg.closest('.segwrap'), active:false, scrolling:false, startX:e.clientX, startY:e.clientY, lastX:e.clientX, pid:e.pointerId, grabOffset:0 };
+  dayDrag={ seg, container:seg.parentElement, active:false, startX:e.clientX, startY:e.clientY, pid:e.pointerId, grabX:0, grabY:0 };
   dayDrag.timer=setTimeout(function(){
     if(!dayDrag) return;
     dayDrag.active=true;
-    dayDrag.grabOffset=dayDrag.startX - seg.getBoundingClientRect().left;
+    const r=seg.getBoundingClientRect();
+    dayDrag.grabX=dayDrag.startX - r.left; dayDrag.grabY=dayDrag.startY - r.top;
     seg.classList.add('dragging');
     try{ seg.setPointerCapture(dayDrag.pid); }catch(_){}
     if(navigator.vibrate){ try{ navigator.vibrate(12); }catch(_){} }
-    positionDrag(dayDrag.startX);
+    positionDrag(dayDrag.startX, dayDrag.startY);
   }, 200);
 });
 document.addEventListener('pointermove',function(e){
   if(!dayDrag||dayDrag.pid!==e.pointerId) return;
-  // Drag mode: tab follows finger, reorder siblings
-  if(dayDrag.active){
-    e.preventDefault();
-    positionDrag(e.clientX);
-    const segs=[...dayDrag.container.querySelectorAll('.seg[data-dayid]')], x=e.clientX;
-    for(const s of segs){ if(s===dayDrag.seg) continue; const r=s.getBoundingClientRect();
-      if(x>=r.left&&x<=r.right){ const di=segs.indexOf(dayDrag.seg), ti=segs.indexOf(s);
-        if(ti<di) dayDrag.container.insertBefore(dayDrag.seg,s); else dayDrag.container.insertBefore(dayDrag.seg,s.nextSibling);
-        positionDrag(x); break; }
-    }
+  if(!dayDrag.active){
+    if(Math.abs(e.clientX-dayDrag.startX)>16||Math.abs(e.clientY-dayDrag.startY)>16){ clearTimeout(dayDrag.timer); dayDrag=null; }
     return;
   }
-  // Horizontal swipe: manually scroll the day row
-  if(dayDrag.scrolling){
-    e.preventDefault();
-    if(dayDrag.scrollEl) dayDrag.scrollEl.scrollLeft -= (e.clientX - dayDrag.lastX);
-    dayDrag.lastX=e.clientX;
-    return;
-  }
-  // Undecided: horizontal move => scroll; vertical move => let the page scroll
-  const dx=e.clientX-dayDrag.startX, dy=e.clientY-dayDrag.startY;
-  if(Math.abs(dx)>12||Math.abs(dy)>12){
-    clearTimeout(dayDrag.timer);
-    if(Math.abs(dx)>Math.abs(dy)){
-      dayDrag.scrolling=true;
-      if(dayDrag.scrollEl) dayDrag.scrollEl.scrollLeft -= (e.clientX - dayDrag.lastX);
-      dayDrag.lastX=e.clientX; e.preventDefault();
-    } else { dayDrag=null; }
+  e.preventDefault();
+  positionDrag(e.clientX, e.clientY);
+  const segs=[...dayDrag.container.querySelectorAll('.seg[data-dayid]')], x=e.clientX, y=e.clientY;
+  for(const s of segs){ if(s===dayDrag.seg) continue; const r=s.getBoundingClientRect();
+    if(x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom){ const di=segs.indexOf(dayDrag.seg), ti=segs.indexOf(s);
+      if(ti<di) dayDrag.container.insertBefore(dayDrag.seg,s); else dayDrag.container.insertBefore(dayDrag.seg,s.nextSibling);
+      positionDrag(x,y); break; }
   }
 },{passive:false});
 function endDayDrag(commit){
