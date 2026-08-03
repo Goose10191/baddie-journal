@@ -89,6 +89,9 @@ Format (JSON):
 
 **Also supported (richer programs):**
 - **Nested wrappers** — a file may wrap everything in `{ "program": { "workouts": [ ...days ] } }`.
+- **Sets vs rounds** — a day is *straight sets* by default (columns labeled "Set 1/2/3"). Make it a
+  *circuit* with `"scale": "rounds"` or `"mode": "rounds"` (columns become "Round 1/2/3", shared across
+  exercises). You can also flip any day in **✎ Edit → Track by: Sets / Rounds**.
 - **Per-exercise sets** — `{ "name": "...", "sets": 3, ... }` gives that exercise its own number of set columns.
 - **Targets** — `"target": "8 each arm"` or `"repRange": [6, 8]` shows a small prescription under the exercise.
 - **Finisher** — `"finisher": "Treadmill Walk"` (plus optional `finisherDetails`).

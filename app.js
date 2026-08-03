@@ -225,7 +225,7 @@ function exHasData(dayId,exId){ const dl=state.active.log[dayId]; if(!dl||!dl.ex
 function duplicateDay(dayId){
   const i=state.plan.days.findIndex(d=>d.id===dayId); if(i<0)return;
   const s=state.plan.days[i];
-  const copy={ id:uid('d'), name:s.name+' (copy)', focus:s.focus, rounds:s.rounds, scaleLabel:s.scaleLabel, finisher:s.finisher,
+  const copy={ id:uid('d'), name:s.name+' (copy)', focus:s.focus, rounds:s.rounds, mode:s.mode, scaleLabel:s.scaleLabel, finisher:s.finisher,
     reflectionFields:s.reflectionFields.map(r=>({...r})), exercises:s.exercises.map(e=>({id:uid('e'),name:e.name,fields:e.fields.slice()})) };
   state.plan.days.splice(i+1,0,copy);
   state.workoutDay=i+1;
@@ -290,7 +290,12 @@ function buildDayFromSpec(spec, num){
   if(anySets) rounds=Math.max.apply(null, exercises.map(e=>e.rounds||1));
   if(!(rounds>=1&&rounds<=8)) rounds=3;
   const scaleLabel=String(spec.scale||spec.scaleType||'').toLowerCase().indexOf('conf')>=0 ? "Today's Confidence" : "Today's Energy";
-  return { id:uid('d'), name:name, focus:focus, rounds:rounds, scaleLabel:scaleLabel, finisher:finisher,
+  // sets (straight sets) vs rounds (circuit)
+  let mode='sets';
+  const ms=String(spec.scale||spec.scaleType||spec.type||'').toLowerCase();
+  if(ms.indexOf('round')>=0||ms.indexOf('circuit')>=0) mode='rounds';
+  if(spec.mode!=null) mode=String(spec.mode).toLowerCase().indexOf('round')>=0?'rounds':'sets';
+  return { id:uid('d'), name:name, focus:focus, rounds:rounds, mode:mode, scaleLabel:scaleLabel, finisher:finisher,
     reflectionFields:[{key:'proud',label:"Something I'm Proud Of Today"}], exercises:exercises };
 }
 function finishImport(specs){
@@ -456,14 +461,15 @@ function screenHome(){
 function logDay(day){
   const dl=state.active.log[day.id]||{};
   const scaleNums=day.scaleLabel.includes('Confidence')?[1,2,3,4,5]:[6,7,8,9,10];
+  const isR=day.mode!=='sets'; // default to rounds unless explicitly sets
   const exs=day.exercises.length? day.exercises.map(ex=>{
-    const rc=ex.rounds||day.rounds;
+    const rc=isR?day.rounds:(ex.rounds||day.rounds);
     const rounds=Array.from({length:rc},(_,ri)=>{
       const cells=ex.fields.map(fk=>{
         const v=(dl.ex&&dl.ex[ex.id]&&dl.ex[ex.id][ri]&&dl.ex[ex.id][ri][fk])||'';
         return '<input class="cell" inputmode="decimal" placeholder="'+esc(FIELD_LABELS[fk]||fk)+'" data-cell data-day="'+day.id+'" data-ex="'+ex.id+'" data-round="'+ri+'" data-fk="'+fk+'" value="'+esc(v)+'">';
       }).join('');
-      return '<div class="round"><div class="rlabel">R'+(ri+1)+'</div>'+cells+'</div>';
+      return '<div class="round"><div class="rlabel">'+(isR?'Round ':'Set ')+(ri+1)+'</div>'+cells+'</div>';
     }).join('');
     const tgt=ex.target?'<div class="extarget">'+esc(ex.target)+'</div>':'';
     return '<div class="excard"><div class="exname"><span class="dot"></span>'+esc(ex.name)+'</div>'+tgt+'<div class="rounds">'+rounds+'</div></div>';
@@ -499,6 +505,7 @@ function logDay(day){
 
 function editDay(day){
   const conf=day.scaleLabel.includes('Confidence');
+  const isR=day.mode!=='sets';
   const delSel=state.ui.delSel||[];
   const dayChips=state.plan.days.map(function(d){ return '<div class="chip'+(delSel.indexOf(d.id)>=0?' on':'')+'" data-act="deltoggle" data-dayid="'+d.id+'">'+esc(d.name)+'</div>'; }).join('');
   const exs=day.exercises.map((ex,i)=>'<div class="excard editrow"><div class="exname"><span class="dot"></span><span>'+esc(ex.name)+'</span><span class="extag">'+ex.fields.map(f=>esc(FIELD_LABELS[f])).join(' · ')+'</span></div><div class="exctrl">'
@@ -509,7 +516,8 @@ function editDay(day){
     +'</div></div>').join('');
   return '<div class="card daymeta">'
     +'<div class="row"><div class="field" style="flex:2"><div class="cap">Day name</div><input class="input sm" data-dfield="name" data-dayid="'+day.id+'" value="'+esc(day.name)+'"></div>'
-    +'<div class="field"><div class="cap">Rounds</div><div class="stepper"><button class="stepbtn" data-act="roundsdec" data-dayid="'+day.id+'">−</button><div class="stepval">'+day.rounds+'</div><button class="stepbtn" data-act="roundsinc" data-dayid="'+day.id+'">＋</button></div></div></div>'
+    +'<div class="field"><div class="cap">'+(isR?'Rounds':'Sets')+'</div><div class="stepper"><button class="stepbtn" data-act="roundsdec" data-dayid="'+day.id+'">−</button><div class="stepval">'+day.rounds+'</div><button class="stepbtn" data-act="roundsinc" data-dayid="'+day.id+'">＋</button></div></div></div>'
+    +'<div class="field mt-s"><div class="cap">Track by</div><div class="segment sm"><div class="seg'+(!isR?' on':'')+'" data-act="setmode" data-dayid="'+day.id+'" data-m="sets">Sets</div><div class="seg'+(isR?' on':'')+'" data-act="setmode" data-dayid="'+day.id+'" data-m="rounds">Rounds</div></div></div>'
     +'<div class="field mt-s"><div class="cap">Focus</div><input class="input sm" data-dfield="focus" data-dayid="'+day.id+'" value="'+esc(day.focus||'')+'" placeholder="e.g. Legs · Glutes"></div>'
     +'<div class="field mt-s"><div class="cap">Rating scale</div><div class="segment sm"><div class="seg'+(!conf?' on':'')+'" data-act="scaletype" data-dayid="'+day.id+'" data-t="energy">Energy</div><div class="seg'+(conf?' on':'')+'" data-act="scaletype" data-dayid="'+day.id+'" data-t="confidence">Confidence</div></div></div>'
     +'<div class="field mt-s"><div class="cap">Finisher (optional)</div><input class="input sm" data-dfield="finisher" data-dayid="'+day.id+'" value="'+esc(day.finisher||'')+'" placeholder="e.g. 15 squats → hold → 15"></div>'
@@ -579,10 +587,11 @@ function screenWeekDetail(id){
   const days=w.plan.days.map(day=>{
     if(!dayHasData(w,day.id)) return '';
     const dl=w.log[day.id]||{};
+    const dIsR=day.mode!=='sets';
     const rows=day.exercises.map(ex=>{
       const sets=((dl.ex&&dl.ex[ex.id])||[]).map((rd,ri)=>{
-        const parts=ex.fields.map(fk=>{const v=rd&&rd[fk];return (v!=null&&String(v).trim()!=='')?FIELD_LABELS[fk]+' '+esc(v):null;}).filter(Boolean);
-        return parts.length?'R'+(ri+1)+': '+parts.join(' · '):null;
+        const parts=ex.fields.map(fk=>{const v=rd&&rd[fk];return (v!=null&&String(v).trim()!=='')?(FIELD_LABELS[fk]||fk)+' '+esc(v):null;}).filter(Boolean);
+        return parts.length?(dIsR?'R':'S')+(ri+1)+': '+parts.join(' · '):null;
       }).filter(Boolean);
       return sets.length?'<div class="rocell"><div class="k">'+esc(ex.name)+'</div><div class="v" style="font-size:12px;font-weight:600;line-height:1.5;">'+sets.join('<br>')+'</div></div>':'';
     }).filter(Boolean).join('');
@@ -776,11 +785,12 @@ el('screen').addEventListener('click',function(e){
   else if(act==='toggleedit'){ state.ui.edit=!state.ui.edit; state.ui.delSel=[]; }
   else if(act==='deltoggle'){ const id=ds.dayid; const s=state.ui.delSel||(state.ui.delSel=[]); const i=s.indexOf(id); if(i>=0)s.splice(i,1); else s.push(id); }
   else if(act==='delselected'){ const s=state.ui.delSel||[]; if(!s.length)return; if(!confirm('Delete '+s.length+' selected day'+(s.length===1?'':'s')+"? This can't be undone."))return; state.plan.days=state.plan.days.filter(d=>s.indexOf(d.id)<0); state.ui.delSel=[]; if(state.workoutDay>=state.plan.days.length)state.workoutDay=Math.max(0,state.plan.days.length-1); }
-  else if(act==='addday'){ const p=state.plan; p.days.push({id:uid('d'),name:'Day '+(p.days.length+1),focus:'',rounds:3,scaleLabel:"Today's Energy",finisher:'',reflectionFields:[{key:'proud',label:"Something I'm Proud Of Today"}],exercises:[]}); state.workoutDay=p.days.length-1; state.ui.edit=true; }
+  else if(act==='addday'){ const p=state.plan; p.days.push({id:uid('d'),name:'Day '+(p.days.length+1),focus:'',rounds:3,mode:'sets',scaleLabel:"Today's Energy",finisher:'',reflectionFields:[{key:'proud',label:"Something I'm Proud Of Today"}],exercises:[]}); state.workoutDay=p.days.length-1; state.ui.edit=true; }
   else if(act==='delday'){ if(!confirm('Delete this whole day and its exercises?'))return; state.plan.days=state.plan.days.filter(x=>x.id!==ds.dayid); if(state.workoutDay>=state.plan.days.length)state.workoutDay=Math.max(0,state.plan.days.length-1); }
   else if(act==='roundsinc'){ const d=findDay(ds.dayid); if(d&&d.rounds<8)d.rounds++; }
   else if(act==='roundsdec'){ const d=findDay(ds.dayid); if(d&&d.rounds>1)d.rounds--; }
   else if(act==='scaletype'){ const d=findDay(ds.dayid); if(d)d.scaleLabel=ds.t==='confidence'?"Today's Confidence":"Today's Energy"; }
+  else if(act==='setmode'){ const d=findDay(ds.dayid); if(d)d.mode=(ds.m==='rounds'?'rounds':'sets'); }
   else if(act==='addex'){ openPicker(ds.day,'add'); }
   else if(act==='exswap'){ openPicker(ds.day,'replace',ds.ex); }
   else if(act==='exup'){ moveEx(ds.day,ds.ex,-1); }
