@@ -5,7 +5,7 @@ const GOALS = ['Get Stronger', 'Build Confidence', 'Become More Athletic', 'Impr
 const WINS = ['Lifted heavier', 'Encouraged someone else', 'Did one more rep', 'Tried something new', "Didn't give up", 'Beat one of my records'];
 const SCORE_ITEMS = ['I showed up.', "I didn't quit.", 'I worked hard.', 'I got stronger.', 'I encouraged someone.', 'I believed in myself.', 'I felt like a Baddie.'];
 const PR_LABELS = ['Heaviest Goblet Squat', 'Longest Wall Sit', 'Longest Plank', 'Farmer Carry Weight', 'Biggest Win This Week'];
-const FIELD_LABELS = {wt: 'Wt', reps: 'Reps', time: 'Time', dist: 'Dist'};
+const FIELD_LABELS = {wt: 'Lbs', reps: 'Reps', time: 'Time', dist: 'Dist'};
 
 // Seed program (used to build the default editable plan)
 const DAY_DEFS = [
