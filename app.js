@@ -77,7 +77,7 @@ function seedPlan(){
   })) };
 }
 function freshActive(){ return {week:'',weight:'',water:0,wins:[],note:'',log:{},prs:['','','','',''],score:[],coachNotes:''}; }
-function freshUI(){ return {edit:false,picker:null,fBody:'All',fEquip:'All',q:'',custom:false,customName:'',customFields:[]}; }
+function freshUI(){ return {edit:false,picker:null,fBody:'All',fEquip:'All',q:'',custom:false,customName:'',customFields:[],delSel:[]}; }
 function freshState(){
   return { tab:'home', workoutDay:0, viewId:null, chartName:null, ui:freshUI(),
     profile:{name:'',goals:[],avatar:''}, plan:seedPlan(), active:freshActive(), history:[] };
@@ -499,6 +499,8 @@ function logDay(day){
 
 function editDay(day){
   const conf=day.scaleLabel.includes('Confidence');
+  const delSel=state.ui.delSel||[];
+  const dayChips=state.plan.days.map(function(d){ return '<div class="chip'+(delSel.indexOf(d.id)>=0?' on':'')+'" data-act="deltoggle" data-dayid="'+d.id+'">'+esc(d.name)+'</div>'; }).join('');
   const exs=day.exercises.map((ex,i)=>'<div class="excard editrow"><div class="exname"><span class="dot"></span><span>'+esc(ex.name)+'</span><span class="extag">'+ex.fields.map(f=>esc(FIELD_LABELS[f])).join(' · ')+'</span></div><div class="exctrl">'
     +'<button class="iconbtn" data-act="exup" data-day="'+day.id+'" data-ex="'+ex.id+'"'+(i===0?' disabled':'')+'>'+I_UP+'</button>'
     +'<button class="iconbtn" data-act="exdown" data-day="'+day.id+'" data-ex="'+ex.id+'"'+(i===day.exercises.length-1?' disabled':'')+'>'+I_DOWN+'</button>'
@@ -518,7 +520,10 @@ function editDay(day){
     +'<button class="btn ghost mt-s" data-act="addday">＋ Add another day</button>'
     +'<div class="divider"></div><div class="seclbl">Import workouts from a file</div>'
     +'<label class="btn ghost sm"><input type="file" accept=".json,.zip,application/json,application/zip" data-importwo hidden>Import workout file (.json or .zip)</label>'
-    +'<button class="btn ghost sm mt-s" data-act="wotemplate">Download example file</button>';
+    +'<button class="btn ghost sm mt-s" data-act="wotemplate">Download example file</button>'
+    +'<div class="divider"></div><div class="seclbl">Delete days — tap to select</div>'
+    +'<div class="chips">'+dayChips+'</div>'
+    +'<button class="btn danger-ghost sm mt-s"'+(delSel.length?'':' disabled')+' data-act="delselected">Delete selected'+(delSel.length?' ('+delSel.length+')':'')+'</button>';
 }
 
 function screenWorkout(){
@@ -768,7 +773,9 @@ el('screen').addEventListener('click',function(e){
   else if(act==='rating'){ const dl=dayLog(a.log,ds.day),n=+ds.n; dl.rating=dl.rating===n?0:n; }
   else if(act==='day'){ state.workoutDay=+ds.i; }
   else if(act==='gotoworkout'){ state.tab='workout'; }
-  else if(act==='toggleedit'){ state.ui.edit=!state.ui.edit; }
+  else if(act==='toggleedit'){ state.ui.edit=!state.ui.edit; state.ui.delSel=[]; }
+  else if(act==='deltoggle'){ const id=ds.dayid; const s=state.ui.delSel||(state.ui.delSel=[]); const i=s.indexOf(id); if(i>=0)s.splice(i,1); else s.push(id); }
+  else if(act==='delselected'){ const s=state.ui.delSel||[]; if(!s.length)return; if(!confirm('Delete '+s.length+' selected day'+(s.length===1?'':'s')+"? This can't be undone."))return; state.plan.days=state.plan.days.filter(d=>s.indexOf(d.id)<0); state.ui.delSel=[]; if(state.workoutDay>=state.plan.days.length)state.workoutDay=Math.max(0,state.plan.days.length-1); }
   else if(act==='addday'){ const p=state.plan; p.days.push({id:uid('d'),name:'Day '+(p.days.length+1),focus:'',rounds:3,scaleLabel:"Today's Energy",finisher:'',reflectionFields:[{key:'proud',label:"Something I'm Proud Of Today"}],exercises:[]}); state.workoutDay=p.days.length-1; state.ui.edit=true; }
   else if(act==='delday'){ if(!confirm('Delete this whole day and its exercises?'))return; state.plan.days=state.plan.days.filter(x=>x.id!==ds.dayid); if(state.workoutDay>=state.plan.days.length)state.workoutDay=Math.max(0,state.plan.days.length-1); }
   else if(act==='roundsinc'){ const d=findDay(ds.dayid); if(d&&d.rounds<8)d.rounds++; }
@@ -839,7 +846,7 @@ el('overlay').addEventListener('input',function(e){
 
 el('nav').addEventListener('click',function(e){
   const t=e.target.closest('[data-nav]'); if(!t) return;
-  state.tab=t.dataset.nav; state.viewId=null; state.ui.edit=false; state.ui.picker=null; persist(); render();
+  state.tab=t.dataset.nav; state.viewId=null; state.ui.edit=false; state.ui.picker=null; state.ui.delSel=[]; persist(); render();
 });
 
 /* ================= Press-and-hold drag to reorder day tabs ================= */
