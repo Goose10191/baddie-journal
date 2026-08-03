@@ -55,6 +55,38 @@ The app uses relative paths, so it works correctly under that `/baddie-journal/`
 Edit files → **bump the `CACHE` version** in `sw.js` (e.g. `baddies-v2` → `baddies-v3`)
 so installed devices pull the new version → commit & push in GitHub Desktop. Pages redeploys automatically.
 
+## Importing workouts (build days from a file)
+On the **Workout** tab → **✎ Edit** → **Import workout file (.json)**. Uploading **appends**
+the days to the current plan. Use **Download example file** for a starting template.
+
+Format (JSON):
+```json
+{
+  "days": [
+    {
+      "name": "Push Day",
+      "focus": "Chest · Shoulders",
+      "rounds": 4,
+      "scale": "energy",
+      "finisher": "Max Push-Ups",
+      "exercises": [
+        { "name": "Dumbbell Bench Press", "track": ["wt", "reps"] },
+        "Push-Ups",
+        { "name": "Plank", "track": ["time"] },
+        { "name": "Farmer Carry", "track": ["wt", "dist"] }
+      ]
+    }
+  ]
+}
+```
+- `days` — a list of workout days (or pass a single day object / a bare array of days).
+- Per day: `name` (required), `focus`, `rounds` (1–8, default 3), `scale` (`"energy"` | `"confidence"`),
+  `finisher` — all optional except name.
+- `exercises` — each entry is either a **name string** (e.g. `"Push-Ups"`; if it's a known
+  exercise the app auto-picks what to track) or an object `{ "name": ..., "track": [...] }`.
+- `track` values: `"wt"`, `"reps"`, `"time"`, `"dist"` (weight, reps, time, distance).
+  Synonyms like `"weight"`, `"seconds"`, `"distance"` are accepted. Unknown exercises default to weight + reps.
+
 ## Data notes
 - Data is **per device / per browser** — private to each girl. No cloud sync by design
   (you said this is just for them). Clearing the browser's site data erases entries.

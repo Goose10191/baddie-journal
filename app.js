@@ -231,6 +231,83 @@ function duplicateDay(dayId){
   state.workoutDay=i+1;
 }
 
+/* ---- Import workout days from an uploaded JSON file ---- */
+function fieldSyn(f){
+  f=String(f).toLowerCase().trim();
+  if(['wt','weight','lbs','lb','kg','load'].indexOf(f)>=0) return 'wt';
+  if(['reps','rep','count','number'].indexOf(f)>=0) return 'reps';
+  if(['time','secs','seconds','sec','duration','min','mins','hold'].indexOf(f)>=0) return 'time';
+  if(['dist','distance','ft','feet','m','meters','yd','yards'].indexOf(f)>=0) return 'dist';
+  return null;
+}
+function libFieldsFor(name){
+  const n=String(name).toLowerCase().trim();
+  let f=LIBRARY.find(x=>x.n.toLowerCase()===n);
+  if(!f) f=LIBRARY.find(x=>x.n.toLowerCase().replace(/s$/,'')===n.replace(/s$/,'')); // singular/plural tolerant
+  return f?f.f.slice():null;
+}
+function buildDayFromSpec(spec, num){
+  spec=spec||{};
+  const name=String(spec.name||spec.day||spec.title||('Day '+num)).trim()||('Day '+num);
+  const focus=String(spec.focus||spec.subtitle||spec.target||'');
+  let rounds=parseInt(spec.rounds||spec.sets||3,10); if(!(rounds>=1&&rounds<=8)) rounds=3;
+  const scaleLabel=String(spec.scale||spec.scaleType||'energy').toLowerCase().indexOf('conf')>=0 ? "Today's Confidence" : "Today's Energy";
+  const finisher=String(spec.finisher||'');
+  const list=Array.isArray(spec.exercises)?spec.exercises:(Array.isArray(spec.movements)?spec.movements:[]);
+  const exercises=list.map(function(ex){
+    let exName, track;
+    if(typeof ex==='string'){ exName=ex; track=null; }
+    else if(ex){ exName=String(ex.name||ex.exercise||ex.movement||''); track=ex.track||ex.fields||ex.log||null; }
+    else return null;
+    exName=exName.trim(); if(!exName) return null;
+    let fields=null;
+    if(Array.isArray(track)) fields=track.map(fieldSyn).filter(Boolean);
+    else if(typeof track==='string'&&track.trim()) fields=track.split(/[\s,/|]+/).map(fieldSyn).filter(Boolean);
+    if(!fields||!fields.length) fields=libFieldsFor(exName)||['wt','reps'];
+    return { id:uid('e'), name:exName, fields:fields };
+  }).filter(Boolean);
+  return { id:uid('d'), name:name, focus:focus, rounds:rounds, scaleLabel:scaleLabel, finisher:finisher,
+    reflectionFields:[{key:'proud',label:"Something I'm Proud Of Today"}], exercises:exercises };
+}
+function importWorkouts(file){
+  const r=new FileReader();
+  r.onload=function(e){
+    let data; try{ data=JSON.parse(e.target.result); }catch(err){ alert('That file is not valid JSON. Use the example file as a template.'); return; }
+    let specs;
+    if(Array.isArray(data)) specs=data;
+    else if(data&&Array.isArray(data.days)) specs=data.days;
+    else if(data&&Array.isArray(data.workouts)) specs=data.workouts;
+    else if(data&&(data.exercises||data.movements||data.name)) specs=[data];
+    else { alert('No workouts found in that file. It should have a "days" list — see the example file.'); return; }
+    const start=state.plan.days.length;
+    const built=specs.map((s,i)=>buildDayFromSpec(s,start+i+1)).filter(d=>d&&d.exercises.length);
+    if(!built.length){ alert('No valid workouts found. Each day needs a name and at least one exercise.'); return; }
+    state.plan.days=state.plan.days.concat(built);
+    state.workoutDay=start; state.tab='workout'; state.ui.edit=false; state.ui.picker=null;
+    persist(); render();
+    alert('Added '+built.length+' workout'+(built.length===1?'':'s')+' to your plan.');
+  };
+  r.readAsText(file);
+}
+function downloadWorkoutTemplate(){
+  const sample={ days:[
+    { name:'My New Day', focus:'Full Body', rounds:3, scale:'energy', finisher:'20 Jumping Jacks',
+      exercises:[
+        {name:'Goblet Squat', track:['wt','reps']},
+        {name:'Push-Ups', track:['reps']},
+        {name:'Plank', track:['time']},
+        {name:'Farmer Carry', track:['wt','dist']},
+        'Jump Rope'
+      ] }
+  ]};
+  try{
+    const blob=new Blob([JSON.stringify(sample,null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob); const a=document.createElement('a');
+    a.href=url; a.download='baddie-workout-template.json'; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(url); },1500);
+  }catch(err){ alert('Could not create the template file.'); }
+}
+
 /* ================= Log accessors ================= */
 function dayLog(log,dayId){ if(!log[dayId]) log[dayId]={rating:0,scale:null,reflections:{},ex:{}}; return log[dayId]; }
 function setCell(dayId,exId,ri,fk,v){ const dl=dayLog(state.active.log,dayId); if(!dl.ex[exId])dl.ex[exId]=[]; if(!dl.ex[exId][ri])dl.ex[exId][ri]={}; dl.ex[exId][ri][fk]=v; }
@@ -375,7 +452,10 @@ function editDay(day){
     +'<button class="btn danger-ghost sm mt-s" data-act="delday" data-dayid="'+day.id+'">Delete this day</button></div>'
     +'<div class="seclbl mt">Exercises</div><div class="exlist">'+(exs||'<div class="empty">No exercises yet.</div>')+'</div>'
     +'<button class="btn ghost mt-s" data-act="addex" data-day="'+day.id+'">＋ Add exercise</button>'
-    +'<button class="btn ghost mt-s" data-act="addday">＋ Add another day</button>';
+    +'<button class="btn ghost mt-s" data-act="addday">＋ Add another day</button>'
+    +'<div class="divider"></div><div class="seclbl">Import workouts from a file</div>'
+    +'<label class="btn ghost sm"><input type="file" accept="application/json,.json" data-importwo hidden>Import workout file (.json)</label>'
+    +'<button class="btn ghost sm mt-s" data-act="wotemplate">Download example file</button>';
 }
 
 function screenWorkout(){
@@ -644,6 +724,7 @@ el('screen').addEventListener('click',function(e){
   else if(act==='rmavatar'){ state.profile.avatar=''; }
   else if(act==='export'){ exportData(); return; }
   else if(act==='rest'){ startRest(+ds.sec); return; }
+  else if(act==='wotemplate'){ downloadWorkoutTemplate(); return; }
   else if(act==='toggledone'){ const dl=dayLog(a.log,ds.day); dl.done=!dl.done; }
   else if(act==='dupday'){ duplicateDay(ds.dayid); }
   else if(act==='wostart'){ woStart(); render(); return; }
@@ -657,6 +738,7 @@ el('screen').addEventListener('change',function(e){
   if(e.target.dataset.act==='chartsel'){ state.chartName=e.target.value; persist(); render(); }
   else if(e.target.dataset.avatar!==undefined){ const f=e.target.files&&e.target.files[0]; if(f) loadAvatar(f); }
   else if(e.target.dataset.import!==undefined){ const f=e.target.files&&e.target.files[0]; if(f) importData(f); }
+  else if(e.target.dataset.importwo!==undefined){ const f=e.target.files&&e.target.files[0]; if(f) importWorkouts(f); }
 });
 
 el('screen').addEventListener('input',function(e){
