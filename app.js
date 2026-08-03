@@ -80,7 +80,7 @@ function freshActive(){ return {week:'',weight:'',water:0,wins:[],note:'',log:{}
 function freshUI(){ return {edit:false,picker:null,fBody:'All',fEquip:'All',q:'',custom:false,customName:'',customFields:[],delSel:[]}; }
 function freshState(){
   return { tab:'home', workoutDay:0, viewId:null, chartName:null, ui:freshUI(),
-    profile:{name:'',goals:[],avatar:''}, plan:seedPlan(), active:freshActive(), history:[] };
+    profile:{name:'',goals:[],avatar:''}, plan:seedPlan(), active:freshActive(), history:[], lastBackup:0, backupSnooze:0 };
 }
 
 // Convert an old positional week (days keyed day1.. + parallel scale/ratings/reflections) into id-keyed log.
@@ -113,6 +113,7 @@ function loadState(){
     s.tab=['home','workout','progress','me'].includes(v3.tab)?v3.tab:'home';
     s.workoutDay=Number.isInteger(v3.workoutDay)?v3.workoutDay:0;
     s.chartName=v3.chartName||null;
+    s.lastBackup=v3.lastBackup||0; s.backupSnooze=v3.backupSnooze||0;
     return s;
   }
   // Migrate from V2 (had active.days positional + separate scale/ratings/reflections, no plan)
@@ -177,6 +178,7 @@ function exportData(){
     a.href=url; a.download='baddie-journal-backup-'+todayLabel().replace(/[^0-9a-z]+/gi,'-').toLowerCase()+'.json';
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function(){ URL.revokeObjectURL(url); }, 1500);
+    state.lastBackup=Date.now(); state.backupSnooze=0; persist(); render();
   }catch(e){ alert('Could not create the backup file.'); }
 }
 function importData(file){
@@ -400,6 +402,44 @@ function timeline(includeCurrent){
   return arr;
 }
 
+/* ---- "Last time" reference ---- */
+function fmtSet(rd, fields){
+  if(!rd) return null;
+  const has=v=>v!=null&&String(v).trim()!=='';
+  if(has(rd.wt)&&has(rd.reps)) return String(rd.wt).trim()+'×'+String(rd.reps).trim();
+  if(has(rd.wt)&&has(rd.dist)) return String(rd.wt).trim()+' / '+String(rd.dist).trim();
+  if(has(rd.time)) return String(rd.time).trim();
+  if(has(rd.dist)) return String(rd.dist).trim();
+  if(has(rd.reps)) return String(rd.reps).trim()+' reps';
+  if(has(rd.wt)) return String(rd.wt).trim()+' lb';
+  return null;
+}
+// Map exercise-name -> most recent finished-week logged sets {week, sets[]}.
+function lastSessionIndex(){
+  const idx={};
+  for(const h of state.history){                 // newest first
+    for(const d of h.plan.days){
+      for(const ex of d.exercises){
+        const key=ex.name.toLowerCase().trim();
+        if(idx[key]) continue;
+        const arr=(h.log[d.id]&&h.log[d.id].ex[ex.id])||[];
+        const sets=arr.map(rd=>fmtSet(rd,ex.fields)).filter(Boolean);
+        if(sets.length) idx[key]={week:h.week||'', sets:sets};
+      }
+    }
+  }
+  return idx;
+}
+
+/* ---- Backup reminder ---- */
+function daysAgo(ms){ const d=Math.floor((Date.now()-ms)/86400000); return d<=0?'today':(d===1?'yesterday':(d+' days ago')); }
+function backupStale(){
+  if(!state.history.length) return false;                       // nothing worth losing yet
+  const now=Date.now();
+  if(state.backupSnooze && now-state.backupSnooze < 7*86400000) return false; // snoozed a week
+  return (now-(state.lastBackup||0)) > 21*86400000;             // never, or >3 weeks
+}
+
 /* ================= Small helpers ================= */
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 const el=document.getElementById.bind(document);
@@ -444,7 +484,8 @@ function screenHome(){
   const drops=Array.from({length:8},(_,i)=>'<div class="drop'+(i<a.water?' on':'')+'" data-act="water" data-i="'+i+'"></div>').join('');
   const goalChips=state.profile.goals.length? state.profile.goals.map(g=>'<div class="chip on">'+esc(g)+'</div>').join('') : '<div class="sub">No goals set yet — add them on the <b class="spark">Me</b> tab.</div>';
   const segs=plan.days.map((d,i)=>{const dn=state.active.log[d.id]&&state.active.log[d.id].done;return '<div class="seg'+(state.workoutDay===i?' on':'')+(dn?' done':'')+'" data-act="day" data-i="'+i+'">'+esc(d.name)+(dn?'<span class="segchk">'+CHECK+'</span>':'')+'<span class="sd">'+esc((d.focus||'').split(' · ')[0])+'</span></div>';}).join('');
-  return greeting()
+  const banner=backupStale()?'<div class="banner"><div class="bannertxt">Back up your progress so a lost or reset phone can’t erase it.</div><div class="bannerbtns"><button class="btn sm" data-act="export">Export backup</button><button class="btn ghost sm" data-act="snoozebackup">Later</button></div></div>':'';
+  return banner+greeting()
     +'<div class="sub mb">'+(a.week?'Week of '+esc(a.week):todayLabel())+' · Bertram Baddies</div>'
     +'<div class="stats mt-s">'
     +'<div class="stat accent"><div class="num">'+done+'<small>/'+plan.days.length+'</small></div><div class="cap">Workouts this week</div></div>'
@@ -462,6 +503,7 @@ function logDay(day){
   const dl=state.active.log[day.id]||{};
   const scaleNums=day.scaleLabel.includes('Confidence')?[1,2,3,4,5]:[6,7,8,9,10];
   const isR=day.mode!=='sets'; // default to rounds unless explicitly sets
+  const lastIdx=lastSessionIndex();
   const exs=day.exercises.length? day.exercises.map(ex=>{
     const rc=isR?day.rounds:(ex.rounds||day.rounds);
     const rounds=Array.from({length:rc},(_,ri)=>{
@@ -472,7 +514,9 @@ function logDay(day){
       return '<div class="round"><div class="rlabel">'+(isR?'Round ':'Set ')+(ri+1)+'</div>'+cells+'</div>';
     }).join('');
     const tgt=ex.target?'<div class="extarget">'+esc(ex.target)+'</div>':'';
-    return '<div class="excard"><div class="exname"><span class="dot"></span>'+esc(ex.name)+'</div>'+tgt+'<div class="rounds">'+rounds+'</div></div>';
+    const ls=lastIdx[ex.name.toLowerCase().trim()];
+    const lastLine=ls?'<div class="lastline">Last'+(ls.week?' ('+esc(ls.week)+')':'')+': '+ls.sets.slice(0,5).map(esc).join(' · ')+'</div>':'';
+    return '<div class="excard"><div class="exname"><span class="dot"></span>'+esc(ex.name)+'</div>'+tgt+lastLine+'<div class="rounds">'+rounds+'</div></div>';
   }).join('') : '<div class="empty">No exercises yet. Tap ✎ Edit to add some.</div>';
   const finisher=day.finisher?'<div class="finisher"><div class="fl">'+mi('flame')+' Finisher</div><div class="ft">'+esc(day.finisher)+'</div></div>':'';
   const scale=scaleNums.map(n=>'<div class="sbtn'+(dl.scale===n?' on':'')+'" data-act="scale" data-day="'+day.id+'" data-n="'+n+'">'+n+'</div>').join('');
@@ -644,8 +688,9 @@ function screenMe(){
     +'<button class="btn" data-act="finish">✓ Finish Week &amp; Save to Progress</button>'
     +'<button class="btn ghost sm" style="margin-top:10px;" data-act="cleardata">Reset current week (no save)</button>'
     +'<div class="divider"></div><div class="seclbl">Data &amp; backup</div>'
-    +'<div class="sub" style="margin-bottom:12px;">Everything is stored privately on this device. Currently using about <b class="spark">'+storageLine+'</b> (browsers allow ~5 MB). Back up so a browser reset can\'t lose your progress.</div>'
-    +'<button class="btn ghost sm" data-act="export">Export backup (.json)</button>'
+    +'<div class="sub" style="margin-bottom:6px;">Everything is stored privately on this device. Currently using about <b class="spark">'+storageLine+'</b> (browsers allow ~5 MB). Back up so a browser reset can\'t lose your progress.</div>'
+    +'<div class="sub" style="margin-bottom:12px;'+(backupStale()?'color:var(--red2);font-weight:700;':'')+'">'+(state.lastBackup?'Last backup: '+daysAgo(state.lastBackup)+'.':'You haven’t backed up yet.')+(backupStale()?' Time to export one.':'')+'</div>'
+    +'<button class="btn'+(backupStale()?'':' ghost')+' sm" data-act="export">Export backup (.json)</button>'
     +'<label class="btn ghost sm" style="margin-top:10px;"><input type="file" accept="application/json,.json" data-import hidden>Import / restore backup</label>';
 }
 
@@ -803,6 +848,7 @@ el('screen').addEventListener('click',function(e){
   else if(act==='cleardata'){ if(!confirm("Reset the current week without saving it? This can't be undone."))return; state.active=freshActive(); }
   else if(act==='rmavatar'){ state.profile.avatar=''; }
   else if(act==='export'){ exportData(); return; }
+  else if(act==='snoozebackup'){ state.backupSnooze=Date.now(); }
   else if(act==='rest'){ startRest(+ds.sec); return; }
   else if(act==='wotemplate'){ downloadWorkoutTemplate(); return; }
   else if(act==='toggledone'){ const dl=dayLog(a.log,ds.day); dl.done=!dl.done; }

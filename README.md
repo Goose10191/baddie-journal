@@ -14,6 +14,10 @@ screen as a PWA.
   Calves, Chest, Back, Shoulders, Arms, Core, Full Body, Cardio) and **equipment**
   (Bodyweight, Dumbbell, Kettlebell, Barbell, Band, Machine, Box, Jump Rope, Other),
   searchable, plus **custom exercises** with your choice of tracked fields.
+- **Last-time reference** — while logging, each exercise shows your most recent session's numbers
+  (e.g. "Last (Aug 2): 25×10 · 25×9") so you can push for progressive overload.
+- **Backup reminder** — since data is on-device, Home nudges you to export a backup if it's been 3+ weeks
+  (or never); the Me tab shows when you last backed up. Exporting records the date.
 - **Progress** — stat summary + line charts (top-set weight per exercise, workout rating,
   bodyweight) and a browsable history of every finished week (tap to view, or delete).
   Each finished week snapshots the plan it used, so history stays accurate after edits.
