@@ -14,6 +14,8 @@ screen as a PWA.
   Calves, Chest, Back, Shoulders, Arms, Core, Full Body, Cardio) and **equipment**
   (Bodyweight, Dumbbell, Kettlebell, Barbell, Band, Machine, Box, Jump Rope, Other),
   searchable, plus **custom exercises** with your choice of tracked fields.
+- **Per-exercise sets** — in Edit mode each exercise has its own Sets stepper (overrides the day default), so one lift can be 3 sets while another is 4.
+- **Workout summary** — marking a workout complete pops a celebration with duration, estimated calories, total reps, total weight lifted, any new PRs, and a rotating motivational quote.
 - **Last-time reference** — while logging, each exercise shows your most recent session's numbers
   (e.g. "Last (Aug 2): 25×10 · 25×9") so you can push for progressive overload.
 - **Backup reminder** — since data is on-device, Home nudges you to export a backup if it's been 3+ weeks

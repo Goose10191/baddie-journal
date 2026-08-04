@@ -6,6 +6,7 @@ const WINS = ['Lifted heavier', 'Encouraged someone else', 'Did one more rep', '
 const SCORE_ITEMS = ['I showed up.', "I didn't quit.", 'I worked hard.', 'I got stronger.', 'I encouraged someone.', 'I believed in myself.', 'I felt like a Baddie.'];
 const PR_LABELS = ['Heaviest Goblet Squat', 'Longest Wall Sit', 'Longest Plank', 'Farmer Carry Weight', 'Biggest Win This Week'];
 const FIELD_LABELS = {wt: 'Lbs', reps: 'Reps', time: 'Time', dist: 'Dist', rir: 'RIR', pain: 'Pain'};
+const QUOTES = ["You're a superstar!","You did great, champ!","Awesome job!","Crushed it today!","Strong work — proud of you!","You showed up and showed out!","Unstoppable!","That's how a Baddie trains!","Beast mode: complete.","Every rep made you stronger!","Way to finish strong!","You're getting better every week!"];
 
 // Seed program (used to build the default editable plan)
 const DAY_DEFS = [
@@ -77,7 +78,7 @@ function seedPlan(){
   })) };
 }
 function freshActive(){ return {week:'',weight:'',water:0,wins:[],note:'',log:{},prs:['','','','',''],score:[],coachNotes:''}; }
-function freshUI(){ return {edit:false,picker:null,fBody:'All',fEquip:'All',q:'',custom:false,customName:'',customFields:[],delSel:[]}; }
+function freshUI(){ return {edit:false,picker:null,fBody:'All',fEquip:'All',q:'',custom:false,customName:'',customFields:[],delSel:[],summary:null}; }
 function freshState(){
   return { tab:'home', workoutDay:0, viewId:null, chartName:null, ui:freshUI(),
     profile:{name:'',goals:[],avatar:''}, plan:seedPlan(), active:freshActive(), history:[], lastBackup:0, backupSnooze:0 };
@@ -431,6 +432,41 @@ function lastSessionIndex(){
   return idx;
 }
 
+/* ---- End-of-workout summary ---- */
+function commaNum(n){ return (''+n).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+function historicalMaxByName(){
+  const m={};
+  for(const h of state.history){ for(const d of h.plan.days){ for(const ex of d.exercises){
+    if(!ex.fields.includes('wt')) continue;
+    const arr=(h.log[d.id]&&h.log[d.id].ex[ex.id])||[];
+    for(const rd of arr){ const n=num(rd&&rd.wt); if(n!=null){ const k=ex.name.toLowerCase().trim(); if(m[k]==null||n>m[k])m[k]=n; } }
+  } } }
+  return m;
+}
+function computeSummary(dayId){
+  const day=state.plan.days.find(d=>d.id===dayId); if(!day) return null;
+  const dl=state.active.log[dayId]||{};
+  let totalReps=0, volume=0, totalSets=0; const histMax=historicalMaxByName(); const prs=[];
+  for(const ex of day.exercises){
+    const arr=(dl.ex&&dl.ex[ex.id])||[]; let sMax=null;
+    for(const rd of arr){ if(!rd) continue;
+      const w=num(rd.wt), r=num(rd.reps);
+      if(Object.keys(rd).some(k=>String(rd[k]).trim()!=='')) totalSets++;
+      if(r!=null) totalReps+=r;
+      if(w!=null&&r!=null) volume+=w*r;
+      if(w!=null&&(sMax==null||w>sMax)) sMax=w;
+    }
+    if(ex.fields.includes('wt')&&sMax!=null){ const k=ex.name.toLowerCase().trim(); const prior=histMax[k]; if(prior!=null&&sMax>prior) prs.push({name:ex.name,wt:sMax,prev:prior}); }
+  }
+  const durSec=dl.duration||0;
+  const bw=num(state.active.weight); const massKg=(bw||140)/2.2046;
+  const minutes=durSec>0?durSec/60:totalSets*2;
+  const calories=Math.max(0,Math.round(0.0875*massKg*minutes)); // ~MET 5 strength training
+  return { dayName:day.name, durationSec:durSec, calories:calories, estCal:durSec<=0,
+    totalReps:totalReps, volume:Math.round(volume), totalSets:totalSets, prs:prs,
+    quote:QUOTES[Math.floor(Math.random()*QUOTES.length)] };
+}
+
 /* ---- Backup reminder ---- */
 function daysAgo(ms){ const d=Math.floor((Date.now()-ms)/86400000); return d<=0?'today':(d===1?'yesterday':(d+' days ago')); }
 function backupStale(){
@@ -552,12 +588,16 @@ function editDay(day){
   const isR=day.mode!=='sets';
   const delSel=state.ui.delSel||[];
   const dayChips=state.plan.days.map(function(d){ return '<div class="chip'+(delSel.indexOf(d.id)>=0?' on':'')+'" data-act="deltoggle" data-dayid="'+d.id+'">'+esc(d.name)+'</div>'; }).join('');
-  const exs=day.exercises.map((ex,i)=>'<div class="excard editrow"><div class="exname"><span class="dot"></span><span>'+esc(ex.name)+'</span><span class="extag">'+ex.fields.map(f=>esc(FIELD_LABELS[f])).join(' · ')+'</span></div><div class="exctrl">'
-    +'<button class="iconbtn" data-act="exup" data-day="'+day.id+'" data-ex="'+ex.id+'"'+(i===0?' disabled':'')+'>'+I_UP+'</button>'
-    +'<button class="iconbtn" data-act="exdown" data-day="'+day.id+'" data-ex="'+ex.id+'"'+(i===day.exercises.length-1?' disabled':'')+'>'+I_DOWN+'</button>'
-    +'<button class="iconbtn" data-act="exswap" data-day="'+day.id+'" data-ex="'+ex.id+'">'+I_SWAP+'</button>'
-    +'<button class="iconbtn danger" data-act="exdel" data-day="'+day.id+'" data-ex="'+ex.id+'">'+I_TRASH+'</button>'
-    +'</div></div>').join('');
+  const exs=day.exercises.map((ex,i)=>'<div class="excard editrow">'
+    +'<div class="editrow-top"><div class="exname"><span class="dot"></span><span>'+esc(ex.name)+'</span><span class="extag">'+ex.fields.map(f=>esc(FIELD_LABELS[f])).join(' · ')+'</span></div>'
+    +'<div class="exctrl">'
+      +'<button class="iconbtn" data-act="exup" data-day="'+day.id+'" data-ex="'+ex.id+'"'+(i===0?' disabled':'')+'>'+I_UP+'</button>'
+      +'<button class="iconbtn" data-act="exdown" data-day="'+day.id+'" data-ex="'+ex.id+'"'+(i===day.exercises.length-1?' disabled':'')+'>'+I_DOWN+'</button>'
+      +'<button class="iconbtn" data-act="exswap" data-day="'+day.id+'" data-ex="'+ex.id+'">'+I_SWAP+'</button>'
+      +'<button class="iconbtn danger" data-act="exdel" data-day="'+day.id+'" data-ex="'+ex.id+'">'+I_TRASH+'</button>'
+    +'</div></div>'
+    +(isR?'':'<div class="editrow-sets"><span class="setslabel">Sets</span><div class="stepper mini"><button class="stepbtn" data-act="exsetsdec" data-day="'+day.id+'" data-ex="'+ex.id+'">−</button><div class="stepval">'+(ex.rounds||day.rounds)+'</div><button class="stepbtn" data-act="exsetsinc" data-day="'+day.id+'" data-ex="'+ex.id+'">＋</button></div></div>')
+    +'</div>').join('');
   return '<div class="card daymeta">'
     +'<div class="row"><div class="field" style="flex:2"><div class="cap">Day name</div><input class="input sm" data-dfield="name" data-dayid="'+day.id+'" value="'+esc(day.name)+'"></div>'
     +'<div class="field"><div class="cap">'+(isR?'Rounds':'Sets')+'</div><div class="stepper"><button class="stepbtn" data-act="roundsdec" data-dayid="'+day.id+'">−</button><div class="stepval">'+day.rounds+'</div><button class="stepbtn" data-act="roundsinc" data-dayid="'+day.id+'">＋</button></div></div></div>'
@@ -712,8 +752,24 @@ function renderPickList(){
   if(!items.length) return '<div class="empty">No exercises match. Clear a filter or add a custom one below.</div>';
   return items.map(function(o){var x=o.x,i=o.i;return '<div class="pickitem" data-act="pick" data-lib="'+i+'"><div class="pn">'+esc(x.n)+'</div><div class="picktag">'+esc(x.b)+' · '+esc(x.e)+'<br>'+x.f.map(f=>esc(FIELD_LABELS[f])).join('/')+'</div><span class="pickadd">＋</span></div>';}).join('');
 }
+function renderSummary(s){
+  const stat=(n,l)=>'<div class="stat"><div class="num">'+n+'</div><div class="cap">'+l+'</div></div>';
+  const cards=(s.durationSec?stat(fmtWO(s.durationSec*1000),'Duration'):'')
+    +stat((s.estCal?'~':'')+commaNum(s.calories),'Est. calories')
+    +stat(commaNum(s.totalReps),'Total reps')
+    +stat(commaNum(s.volume)+'<small> lb</small>','Weight lifted');
+  const prbox=s.prs.length?'<div class="prbox"><div class="prtitle">'+mi('trophy','red')+' New Personal Records</div>'+s.prs.map(p=>'<div class="prrow"><span>'+esc(p.name)+'</span><b>'+p.wt+' lb</b></div>').join('')+'</div>':'';
+  return '<div class="summarycard"><div class="sumcheck">'+CHECK+'</div>'
+    +'<div class="hdr sumtitle">Workout Complete!</div>'
+    +'<div class="sub" style="margin-bottom:16px;">'+esc(s.dayName)+'</div>'
+    +'<div class="stats">'+cards+'</div>'+prbox
+    +'<div class="quote">'+esc(s.quote)+'</div>'
+    +'<button class="btn" data-act="closesummary">Done</button></div>';
+}
 function renderOverlay(){
-  const ov=el('overlay'), p=state.ui.picker;
+  const ov=el('overlay');
+  if(state.ui.summary){ ov.className='overlay centered'; ov.innerHTML=renderSummary(state.ui.summary); return; }
+  const p=state.ui.picker;
   if(!p){ ov.className=''; ov.innerHTML=''; return; }
   const bodyChips=['All'].concat(BODY_PARTS).map(b=>'<div class="fchip'+(state.ui.fBody===b?' on':'')+'" data-act="fbody" data-v="'+esc(b)+'">'+esc(b)+'</div>').join('');
   const equipChips=['All'].concat(EQUIP).map(e=>'<div class="fchip'+(state.ui.fEquip===e?' on':'')+'" data-act="fequip" data-v="'+esc(e)+'">'+esc(e)+'</div>').join('');
@@ -834,6 +890,8 @@ el('screen').addEventListener('click',function(e){
   else if(act==='delday'){ if(!confirm('Delete this whole day and its exercises?'))return; state.plan.days=state.plan.days.filter(x=>x.id!==ds.dayid); if(state.workoutDay>=state.plan.days.length)state.workoutDay=Math.max(0,state.plan.days.length-1); }
   else if(act==='roundsinc'){ const d=findDay(ds.dayid); if(d&&d.rounds<8)d.rounds++; }
   else if(act==='roundsdec'){ const d=findDay(ds.dayid); if(d&&d.rounds>1)d.rounds--; }
+  else if(act==='exsetsinc'){ const d=findDay(ds.day); const ex=d&&d.exercises.find(x=>x.id===ds.ex); if(ex){ const n=(ex.rounds||d.rounds); if(n<8)ex.rounds=n+1; } }
+  else if(act==='exsetsdec'){ const d=findDay(ds.day); const ex=d&&d.exercises.find(x=>x.id===ds.ex); if(ex){ const n=(ex.rounds||d.rounds); if(n>1)ex.rounds=n-1; } }
   else if(act==='scaletype'){ const d=findDay(ds.dayid); if(d)d.scaleLabel=ds.t==='confidence'?"Today's Confidence":"Today's Energy"; }
   else if(act==='setmode'){ const d=findDay(ds.dayid); if(d)d.mode=(ds.m==='rounds'?'rounds':'sets'); }
   else if(act==='addex'){ openPicker(ds.day,'add'); }
@@ -851,7 +909,7 @@ el('screen').addEventListener('click',function(e){
   else if(act==='snoozebackup'){ state.backupSnooze=Date.now(); }
   else if(act==='rest'){ startRest(+ds.sec); return; }
   else if(act==='wotemplate'){ downloadWorkoutTemplate(); return; }
-  else if(act==='toggledone'){ const dl=dayLog(a.log,ds.day); dl.done=!dl.done; }
+  else if(act==='toggledone'){ const dl=dayLog(a.log,ds.day); dl.done=!dl.done; if(dl.done) state.ui.summary=computeSummary(ds.day); }
   else if(act==='dupday'){ duplicateDay(ds.dayid); }
   else if(act==='wostart'){ woStart(); render(); return; }
   else if(act==='wopause'){ woPause(); render(); return; }
@@ -882,6 +940,7 @@ el('screen').addEventListener('input',function(e){
 });
 
 el('overlay').addEventListener('click',function(e){
+  if(state.ui.summary){ if(e.target===el('overlay')||e.target.closest('[data-act="closesummary"]')){ state.ui.summary=null; persist(); render(); } return; }
   const t=e.target.closest('[data-act]'); if(!t) return;
   const act=t.dataset.act, ds=t.dataset, ui=state.ui, p=ui.picker;
   if(act==='closepicker'){ ui.picker=null; }

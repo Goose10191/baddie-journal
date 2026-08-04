@@ -125,7 +125,13 @@ input::placeholder,textarea::placeholder{color:var(--faint);}
 .cell:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 3px rgba(225,29,58,.16);}
 .cell::placeholder{font-weight:600;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#a49c99;}
 
-.excard.editrow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;}
+.excard.editrow{display:flex;flex-direction:column;gap:10px;padding:12px 14px;}
+.editrow-top{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+.editrow-sets{display:flex;align-items:center;gap:10px;}
+.setslabel{font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);}
+.stepper.mini{height:36px;flex:0 0 auto;}
+.stepper.mini .stepbtn{width:38px;font-size:18px;}
+.stepper.mini .stepval{min-width:30px;font-size:15px;}
 .editrow .exname{margin-bottom:0;flex:1;min-width:0;}
 .exctrl{display:flex;gap:6px;flex-shrink:0;}
 .iconbtn{width:34px;height:34px;border-radius:9px;border:1px solid var(--border2);background:var(--card2);color:var(--muted);display:flex;align-items:center;justify-content:center;cursor:pointer;}
@@ -248,6 +254,21 @@ input::placeholder,textarea::placeholder{color:var(--faint);}
 .picktag{font-size:10px;color:var(--muted);font-weight:700;letter-spacing:.03em;text-transform:uppercase;text-align:right;}
 .pickadd{color:var(--red2);font-size:20px;font-weight:800;}
 .fieldtoggle{display:flex;gap:6px;flex-wrap:wrap;}
+
+.overlay.centered{align-items:center;}
+.summarycard{background:var(--bg2);border:1px solid var(--border2);border-radius:22px;padding:24px 20px;margin:auto;width:calc(100% - 32px);max-width:420px;max-height:calc(100% - 32px);overflow-y:auto;text-align:center;box-shadow:0 24px 64px -20px rgba(0,0,0,.75);animation:pop .3s ease;}
+@keyframes pop{from{transform:scale(.9);opacity:0;}to{transform:none;opacity:1;}}
+.sumcheck{width:64px;height:64px;border-radius:50%;background:rgba(46,207,143,.16);border:2px solid rgba(46,207,143,.6);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;}
+.sumcheck svg{width:34px;height:34px;stroke:var(--good);fill:none;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;}
+.sumtitle{font-size:28px;margin-bottom:4px;}
+.summarycard .stats{margin-bottom:0;}
+.summarycard .stat{text-align:left;}
+.summarycard .stat .num small{font-size:14px;color:var(--muted);}
+.prbox{background:linear-gradient(150deg,#2a1216,var(--card));border:1px solid #4a1a22;border-radius:14px;padding:14px;margin-top:14px;text-align:left;}
+.prtitle{font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--red2);margin-bottom:8px;display:flex;align-items:center;gap:6px;}
+.prrow{display:flex;justify-content:space-between;font-size:14px;padding:3px 0;}
+.prrow b{color:var(--good);}
+.quote{font-family:Anton,Impact,sans-serif;font-size:22px;line-height:1.12;color:#fff;margin:20px 6px;}
 
 /* Frosted glass — surfaces sitting directly over the logo watermark */
 .card,.stat,.excard,.toggle,.hcard,.ro,.segment,.daymeta,.finisher,.sheet,.selex,.stepper,.editpill,.input,.ta,.chip,.pickitem,.fchip{
