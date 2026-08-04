@@ -6,7 +6,8 @@ its own data privately in the browser (`localStorage`). Installable to the home
 screen as a PWA.
 
 ## Features
-- **Home** — greeting dashboard: workouts this week, week streak, water, weeks logged
+- **Home** — greeting dashboard: workouts this week, week streak, water, weeks logged, and a
+  **gym-selfie gallery** (add photos; they auto-rotate, tap to advance, delete any) — stored downscaled, capped at 12
 - **Workout** — days shown as a segmented control; exercises × rounds, finisher,
   energy/confidence scale, star rating, reflections. **Edit mode** (✎) lets you
   add / rename / delete days, change rounds, and add / remove / swap / reorder exercises.

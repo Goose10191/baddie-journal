@@ -81,7 +81,7 @@ function freshActive(){ return {week:'',weight:'',water:0,wins:[],note:'',log:{}
 function freshUI(){ return {edit:false,picker:null,fBody:'All',fEquip:'All',q:'',custom:false,customName:'',customFields:[],delSel:[],summary:null}; }
 function freshState(){
   return { tab:'home', workoutDay:0, viewId:null, chartName:null, ui:freshUI(),
-    profile:{name:'',goals:[],avatar:''}, plan:seedPlan(), active:freshActive(), history:[], lastBackup:0, backupSnooze:0 };
+    profile:{name:'',goals:[],avatar:''}, plan:seedPlan(), active:freshActive(), history:[], gallery:[], lastBackup:0, backupSnooze:0 };
 }
 
 // Convert an old positional week (days keyed day1.. + parallel scale/ratings/reflections) into id-keyed log.
@@ -115,6 +115,7 @@ function loadState(){
     s.workoutDay=Number.isInteger(v3.workoutDay)?v3.workoutDay:0;
     s.chartName=v3.chartName||null;
     s.lastBackup=v3.lastBackup||0; s.backupSnooze=v3.backupSnooze||0;
+    s.gallery=Array.isArray(v3.gallery)?v3.gallery:[];
     return s;
   }
   // Migrate from V2 (had active.days positional + separate scale/ratings/reflections, no plan)
@@ -210,6 +211,37 @@ function loadAvatar(file){
       let data; try{ data=c.toDataURL('image/jpeg',0.85); }catch(err){ data=e.target.result; }
       state.profile.avatar=data;
       if(!persist()){ state.profile.avatar=''; render(); return; }
+      render();
+    };
+    img.onerror=function(){ alert('Could not read that image.'); };
+    img.src=e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+/* ---- Home gym-selfie gallery ---- */
+let galleryIdx=0;
+function galleryTick(){
+  const imgs=state.gallery||[]; const el=document.querySelector('.galimg');
+  if(!el||imgs.length<2) return;
+  galleryIdx=(galleryIdx+1)%imgs.length;
+  el.style.opacity='0';
+  setTimeout(function(){ el.src=imgs[galleryIdx]; el.style.opacity='1'; document.querySelectorAll('.galdot').forEach(function(d,i){ d.classList.toggle('on',i===galleryIdx); }); },180);
+}
+function loadGalleryPhoto(file){
+  if(!file||!/^image\//.test(file.type)){ alert('Please choose an image file.'); return; }
+  const reader=new FileReader();
+  reader.onload=function(e){
+    const img=new Image();
+    img.onload=function(){
+      const MAX=760; let w=img.width,h=img.height; const scale=Math.min(1,MAX/Math.max(w,h)); w=Math.round(w*scale); h=Math.round(h*scale);
+      const c=document.createElement('canvas'); c.width=w; c.height=h; c.getContext('2d').drawImage(img,0,0,w,h);
+      let data; try{ data=c.toDataURL('image/jpeg',0.8); }catch(err){ data=e.target.result; }
+      if(!state.gallery) state.gallery=[];
+      state.gallery.push(data);
+      while(state.gallery.length>12) state.gallery.shift();   // keep it bounded
+      galleryIdx=state.gallery.length-1;
+      if(!persist()){ state.gallery.pop(); alert('Not enough space to save that photo — remove a few first.'); render(); return; }
       render();
     };
     img.onerror=function(){ alert('Could not read that image.'); };
@@ -519,7 +551,10 @@ function screenHome(){
   const streak=(function(){let s=0;const t=timeline(true);for(let i=t.length-1;i>=0;i--){if(workoutsDone(t[i].w)>0)s++;else break;}return s;})();
   const drops=Array.from({length:8},(_,i)=>'<div class="drop'+(i<a.water?' on':'')+'" data-act="water" data-i="'+i+'"></div>').join('');
   const goalChips=state.profile.goals.length? state.profile.goals.map(g=>'<div class="chip on">'+esc(g)+'</div>').join('') : '<div class="sub">No goals set yet — add them on the <b class="spark">Me</b> tab.</div>';
-  const segs=plan.days.map((d,i)=>{const dn=state.active.log[d.id]&&state.active.log[d.id].done;return '<div class="seg'+(state.workoutDay===i?' on':'')+(dn?' done':'')+'" data-act="day" data-i="'+i+'">'+esc(d.name)+(dn?'<span class="segchk">'+CHECK+'</span>':'')+'<span class="sd">'+esc((d.focus||'').split(' · ')[0])+'</span></div>';}).join('');
+  const g=state.gallery||[]; if(galleryIdx>=g.length) galleryIdx=0;
+  const galleryHTML = g.length
+    ? '<div class="gallery"><img class="galimg" data-act="galnext" src="'+esc(g[galleryIdx])+'" alt="Gym photo"><button class="galdel" data-act="galdel" aria-label="Delete photo">×</button><label class="galadd"><input type="file" accept="image/*" data-galadd hidden>＋</label>'+(g.length>1?'<div class="galdots">'+g.map(function(_,i){return '<span class="galdot'+(i===galleryIdx?' on':'')+'"></span>';}).join('')+'</div>':'')+'</div>'
+    : '<label class="galempty"><input type="file" accept="image/*" data-galadd hidden><div class="galempty-title">Add gym selfies</div><div class="galempty-sub">Tap to add — your photos rotate here</div></label>';
   const banner=backupStale()?'<div class="banner"><div class="bannertxt">Back up your progress so a lost or reset phone can’t erase it.</div><div class="bannerbtns"><button class="btn sm" data-act="export">Export backup</button><button class="btn ghost sm" data-act="snoozebackup">Later</button></div></div>':'';
   return banner+greeting()
     +'<div class="sub mb">'+(a.week?'Week of '+esc(a.week):todayLabel())+' · Bertram Baddies</div>'
@@ -529,8 +564,8 @@ function screenHome(){
     +'<div class="stat"><div class="num">'+a.water+'<small>/8</small></div><div class="cap">Water today'+mi('drop','red')+'</div></div>'
     +'<div class="stat"><div class="num">'+state.history.length+'</div><div class="cap">Weeks logged</div></div>'
     +'</div>'
-    +'<div class="mt"><div class="seclbl">Start a workout</div><div class="segwrap"><div class="segment">'+(segs||'<div class="seg">No days</div>')+'</div></div>'
-    +'<button class="btn" data-act="gotoworkout">Open '+(plan.days[state.workoutDay]?esc(plan.days[state.workoutDay].name):'Workout')+' →</button></div>'
+    +'<div class="mt"><div class="seclbl">Baddie Gallery</div>'+galleryHTML
+    +'<button class="btn mt-s" data-act="gotoworkout">Start today’s workout →</button></div>'
     +'<div class="mt"><div class="seclbl">Water — 8 glasses'+mi('drop','red')+'</div><div class="card"><div class="drops">'+drops+'</div></div></div>'
     +'<div class="mt"><div class="seclbl">My goals</div><div class="chips">'+goalChips+'</div></div>';
 }
@@ -910,6 +945,8 @@ el('screen').addEventListener('click',function(e){
   else if(act==='collapseall'){ const day=state.plan.days[state.workoutDay]; if(day) day.exercises.forEach(ex=>{openEx[ex.id]=false;}); }
   else if(act==='day'){ state.workoutDay=+ds.i; }
   else if(act==='gotoworkout'){ state.tab='workout'; }
+  else if(act==='galnext'){ const gl=state.gallery||[]; if(gl.length>1) galleryIdx=(galleryIdx+1)%gl.length; }
+  else if(act==='galdel'){ const gl=state.gallery||[]; if(gl.length){ if(!confirm('Remove this photo?'))return; gl.splice(galleryIdx,1); if(galleryIdx>=gl.length)galleryIdx=Math.max(0,gl.length-1); } }
   else if(act==='toggleedit'){ state.ui.edit=!state.ui.edit; state.ui.delSel=[]; }
   else if(act==='deltoggle'){ const id=ds.dayid; const s=state.ui.delSel||(state.ui.delSel=[]); const i=s.indexOf(id); if(i>=0)s.splice(i,1); else s.push(id); }
   else if(act==='delselected'){ const s=state.ui.delSel||[]; if(!s.length)return; if(!confirm('Delete '+s.length+' selected day'+(s.length===1?'':'s')+"? This can't be undone."))return; state.plan.days=state.plan.days.filter(d=>s.indexOf(d.id)<0); state.ui.delSel=[]; if(state.workoutDay>=state.plan.days.length)state.workoutDay=Math.max(0,state.plan.days.length-1); }
@@ -950,6 +987,7 @@ el('screen').addEventListener('change',function(e){
   else if(e.target.dataset.avatar!==undefined){ const f=e.target.files&&e.target.files[0]; if(f) loadAvatar(f); }
   else if(e.target.dataset.import!==undefined){ const f=e.target.files&&e.target.files[0]; if(f) importData(f); }
   else if(e.target.dataset.importwo!==undefined){ const f=e.target.files&&e.target.files[0]; if(f) importWorkouts(f); }
+  else if(e.target.dataset.galadd!==undefined){ const f=e.target.files&&e.target.files[0]; if(f) loadGalleryPhoto(f); }
 });
 
 el('screen').addEventListener('input',function(e){
@@ -1076,5 +1114,6 @@ let pendingWeekNotice=false;
 })();
 
 render();
+setInterval(galleryTick, 4000);   // rotate the home gallery
 if(pendingWeekNotice){ setTimeout(function(){ alert("New week started — last week's workouts were saved to your Progress."); }, 400); }
 if('serviceWorker' in navigator){ window.addEventListener('load',function(){ navigator.serviceWorker.register('sw.js').catch(function(){}); }); }
