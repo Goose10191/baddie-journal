@@ -536,6 +536,19 @@ function screenHome(){
 }
 
 let openEx={}; // which exercises are expanded on the workout page (transient)
+let autoAdvance=true;
+// An exercise is "done" when every field of every set/round is filled.
+function exFullyComplete(day,ex){
+  const rc=(day.mode!=='sets')?day.rounds:(ex.rounds||day.rounds);
+  const dlex=(state.active.log[day.id]&&state.active.log[day.id].ex[ex.id])||[];
+  for(let ri=0;ri<rc;ri++){ const rd=dlex[ri]; for(const fk of ex.fields){ if(!(rd&&String(rd[fk]||'').trim()!=='')) return false; } }
+  return true;
+}
+function nextUnfinished(day,exId){
+  const list=day.exercises, i=list.findIndex(e=>e.id===exId);
+  for(let k=1;k<=list.length;k++){ const ex=list[(i+k)%list.length]; if(ex.id!==exId&&!exFullyComplete(day,ex)) return ex; }
+  return null;
+}
 function logDay(day){
   const dl=state.active.log[day.id]||{};
   const scaleNums=day.scaleLabel.includes('Confidence')?[1,2,3,4,5]:[6,7,8,9,10];
@@ -586,7 +599,9 @@ function logDay(day){
     ? '<button class="btn done-btn mt" data-act="toggledone" data-day="'+day.id+'"><span class="ic-check">'+CHECK+'</span> Workout complete — tap to undo</button>'
     : '<button class="btn ghost mt" data-act="toggledone" data-day="'+day.id+'">Mark workout complete</button>';
 
-  return woCard+restLauncher+'<div class="exlist mt-s">'+exs+'</div>'+finisher
+  const anyOpen=day.exercises.some(ex=>openEx[ex.id]);
+  const expandRow=day.exercises.length>1?'<div class="exallrow"><button class="btn ghost sm exallbtn" data-act="'+(anyOpen?'collapseall':'expandall')+'">'+(anyOpen?'Collapse all':'Expand all')+'</button></div>':'';
+  return woCard+restLauncher+expandRow+'<div class="exlist">'+exs+'</div>'+finisher
     +'<div class="mt"><div class="seclbl">'+esc(day.scaleLabel)+'</div><div class="scalerow">'+scale+'</div></div>'
     +'<div class="mt"><div class="seclbl">Workout Rating</div><div class="stars">'+stars+'</div></div>'
     +'<div class="mt">'+refl+'</div>'+completeBlock;
@@ -891,6 +906,8 @@ el('screen').addEventListener('click',function(e){
   else if(act==='scale'){ const dl=dayLog(a.log,ds.day),n=+ds.n; dl.scale=dl.scale===n?null:n; }
   else if(act==='rating'){ const dl=dayLog(a.log,ds.day),n=+ds.n; dl.rating=dl.rating===n?0:n; }
   else if(act==='toggleex'){ openEx[ds.ex]=!openEx[ds.ex]; }
+  else if(act==='expandall'){ const day=state.plan.days[state.workoutDay]; if(day) day.exercises.forEach(ex=>{openEx[ex.id]=true;}); }
+  else if(act==='collapseall'){ const day=state.plan.days[state.workoutDay]; if(day) day.exercises.forEach(ex=>{openEx[ex.id]=false;}); }
   else if(act==='day'){ state.workoutDay=+ds.i; }
   else if(act==='gotoworkout'){ state.tab='workout'; }
   else if(act==='toggleedit'){ state.ui.edit=!state.ui.edit; state.ui.delSel=[]; }
@@ -942,7 +959,15 @@ el('screen').addEventListener('input',function(e){
   else if(d.note!==undefined) a.note=v;
   else if(d.coach!==undefined) a.coachNotes=v;
   else if(d.pr!==undefined) a.prs[+d.pr]=v;
-  else if(d.cell!==undefined) setCell(d.day,d.ex,+d.round,d.fk,v);
+  else if(d.cell!==undefined){
+    const day=findDay(d.day), ex=day&&day.exercises.find(x=>x.id===d.ex);
+    const wasComplete=ex?exFullyComplete(day,ex):true;
+    setCell(d.day,d.ex,+d.round,d.fk,v);
+    if(autoAdvance&&ex&&!wasComplete&&exFullyComplete(day,ex)){
+      openEx[ex.id]=false; const nx=nextUnfinished(day,ex.id); if(nx) openEx[nx.id]=true;
+      persist(); render(); return;
+    }
+  }
   else if(d.refl!==undefined){ const dl=dayLog(a.log,d.day); dl.reflections[d.refkey]=v; }
   else if(d.dfield!==undefined){ const day=findDay(d.dayid); if(day){ if(d.dfield==='name')day.name=v; else if(d.dfield==='focus')day.focus=v; else if(d.dfield==='finisher')day.finisher=v; } }
   else return;
