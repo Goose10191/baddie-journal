@@ -226,7 +226,7 @@ function galleryTick(){
   if(!el||imgs.length<2) return;
   galleryIdx=(galleryIdx+1)%imgs.length;
   el.style.opacity='0';
-  setTimeout(function(){ el.src=imgs[galleryIdx]; el.style.opacity='1'; document.querySelectorAll('.galdot').forEach(function(d,i){ d.classList.toggle('on',i===galleryIdx); }); },180);
+  setTimeout(function(){ el.src=imgs[galleryIdx]; const bg=document.querySelector('.galbg'); if(bg) bg.style.backgroundImage='url('+imgs[galleryIdx]+')'; el.style.opacity='1'; document.querySelectorAll('.galdot').forEach(function(d,i){ d.classList.toggle('on',i===galleryIdx); }); },180);
 }
 function processImageFile(file){
   return new Promise(function(resolve,reject){
@@ -566,7 +566,7 @@ function screenHome(){
   const goalChips=state.profile.goals.length? state.profile.goals.map(g=>'<div class="chip on">'+esc(g)+'</div>').join('') : '<div class="sub">No goals set yet — add them on the <b class="spark">Me</b> tab.</div>';
   const g=state.gallery||[]; if(galleryIdx>=g.length) galleryIdx=0;
   const galleryHTML = g.length
-    ? '<div class="gallery"><img class="galimg" data-act="galnext" src="'+esc(g[galleryIdx])+'" alt="Gym photo"><button class="galdel" data-act="galdel" aria-label="Delete photo">×</button><label class="galadd"><input type="file" accept="image/*" data-galadd multiple hidden>＋</label>'+(g.length>1?'<div class="galdots">'+g.map(function(_,i){return '<span class="galdot'+(i===galleryIdx?' on':'')+'"></span>';}).join('')+'</div>':'')+'</div>'
+    ? '<div class="gallery"><div class="galbg" style="background-image:url('+g[galleryIdx]+')"></div><img class="galimg" data-act="galnext" src="'+esc(g[galleryIdx])+'" alt="Gym photo"><button class="galdel" data-act="galdel" aria-label="Delete photo">×</button><label class="galadd"><input type="file" accept="image/*" data-galadd multiple hidden>＋</label>'+(g.length>1?'<div class="galdots">'+g.map(function(_,i){return '<span class="galdot'+(i===galleryIdx?' on':'')+'"></span>';}).join('')+'</div>':'')+'</div>'
     : '<label class="galempty"><input type="file" accept="image/*" data-galadd multiple hidden><div class="galempty-title">Add gym selfies</div><div class="galempty-sub">Tap to add — your photos rotate here</div></label>';
   const banner=backupStale()?'<div class="banner"><div class="bannertxt">Back up your progress so a lost or reset phone can’t erase it.</div><div class="bannerbtns"><button class="btn sm" data-act="export">Export backup</button><button class="btn ghost sm" data-act="snoozebackup">Later</button></div></div>':'';
   return banner+greeting()
@@ -695,14 +695,16 @@ function screenWorkout(){
   if(state.workoutDay>=plan.days.length) state.workoutDay=Math.max(0,plan.days.length-1);
   const segs=plan.days.map((d,i)=>{const dn=state.active.log[d.id]&&state.active.log[d.id].done;return '<div class="seg'+(state.workoutDay===i?' on':'')+(dn?' done':'')+'" data-act="day" data-i="'+i+'" data-dayid="'+d.id+'">'+esc(d.name)+(dn?'<span class="segchk">'+CHECK+'</span>':'')+'<span class="sd">'+esc((d.focus||'').split(' · ')[0])+'</span></div>';}).join('')+(edit?'<div class="seg add" data-act="addday">＋</div>':'');
   const day=plan.days[state.workoutDay];
+  const daySelector = edit
+    ? '<div class="segwrap"><div class="segment">'+segs+'</div></div><div class="draghint">Press &amp; hold a day tab to drag it into a new order</div>'
+    : (plan.days.length? '<select class="selex dayselect" data-act="dayselect">'+plan.days.map(function(d,i){var dn=state.active.log[d.id]&&state.active.log[d.id].done;return '<option value="'+i+'"'+(state.workoutDay===i?' selected':'')+'>'+(dn?'✓ ':'')+esc(d.name)+(d.focus?' · '+esc(d.focus.split(' · ')[0]):'')+'</option>';}).join('')+'</select>' : '');
   let body;
   if(!day) body='<div class="empty">No workout days yet.<br>Tap <b class="spark">Edit</b> then ＋ to add one.</div>';
   else body=edit?editDay(day):logDay(day);
   return '<div class="wkhead"><div><div class="kicker">'+(edit?'Editing plan':"Today's Workout")+'</div><h1 class="h1 hdr">'+(day?esc(day.name):'Workout')+'</h1></div>'
     +'<button class="editpill'+(edit?' on':'')+'" data-act="toggleedit">'+(edit?'✓ Done':'✎ Edit')+'</button></div>'
     +(day&&!edit?'<div class="sub mb">'+esc(day.focus||'')+'</div>':'')
-    +'<div class="segwrap"><div class="segment">'+segs+'</div></div>'
-    +(edit?'<div class="draghint">Press &amp; hold a day tab to drag it into a new order</div>':'')
+    +daySelector
     +body;
 }
 
@@ -997,6 +999,7 @@ el('screen').addEventListener('click',function(e){
 
 el('screen').addEventListener('change',function(e){
   if(e.target.dataset.act==='chartsel'){ state.chartName=e.target.value; persist(); render(); }
+  else if(e.target.dataset.act==='dayselect'){ state.workoutDay=+e.target.value; persist(); render(); }
   else if(e.target.dataset.avatar!==undefined){ const f=e.target.files&&e.target.files[0]; if(f) loadAvatar(f); }
   else if(e.target.dataset.import!==undefined){ const f=e.target.files&&e.target.files[0]; if(f) importData(f); }
   else if(e.target.dataset.importwo!==undefined){ const f=e.target.files&&e.target.files[0]; if(f) importWorkouts(f); }
