@@ -535,6 +535,7 @@ function screenHome(){
     +'<div class="mt"><div class="seclbl">My goals</div><div class="chips">'+goalChips+'</div></div>';
 }
 
+let openEx={}; // which exercises are expanded on the workout page (transient)
 function logDay(day){
   const dl=state.active.log[day.id]||{};
   const scaleNums=day.scaleLabel.includes('Confidence')?[1,2,3,4,5]:[6,7,8,9,10];
@@ -542,17 +543,25 @@ function logDay(day){
   const lastIdx=lastSessionIndex();
   const exs=day.exercises.length? day.exercises.map(ex=>{
     const rc=isR?day.rounds:(ex.rounds||day.rounds);
-    const rounds=Array.from({length:rc},(_,ri)=>{
-      const cells=ex.fields.map(fk=>{
-        const v=(dl.ex&&dl.ex[ex.id]&&dl.ex[ex.id][ri]&&dl.ex[ex.id][ri][fk])||'';
-        return '<input class="cell" inputmode="decimal" placeholder="'+esc(FIELD_LABELS[fk]||fk)+'" data-cell data-day="'+day.id+'" data-ex="'+ex.id+'" data-round="'+ri+'" data-fk="'+fk+'" value="'+esc(v)+'">';
+    const dlex=(dl.ex&&dl.ex[ex.id])||[];
+    const open=!!openEx[ex.id];
+    let filled=0; for(let ri=0;ri<rc;ri++){ const rd=dlex[ri]; if(rd&&Object.keys(rd).some(k=>String(rd[k]).trim()!=='')) filled++; }
+    const header='<div class="exhead'+(open?' open':'')+'" data-act="toggleex" data-ex="'+ex.id+'"><span class="dot"></span><span class="exname-txt">'+esc(ex.name)+'</span><span class="exprog'+(rc>0&&filled>=rc?' done':'')+'">'+filled+'/'+rc+'</span><svg class="exchev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg></div>';
+    let body='';
+    if(open){
+      const rounds=Array.from({length:rc},(_,ri)=>{
+        const cells=ex.fields.map(fk=>{
+          const v=(dlex[ri]&&dlex[ri][fk])||'';
+          return '<input class="cell" inputmode="decimal" placeholder="'+esc(FIELD_LABELS[fk]||fk)+'" data-cell data-day="'+day.id+'" data-ex="'+ex.id+'" data-round="'+ri+'" data-fk="'+fk+'" value="'+esc(v)+'">';
+        }).join('');
+        return '<div class="round"><div class="rlabel">'+(isR?'Round ':'Set ')+(ri+1)+'</div>'+cells+'</div>';
       }).join('');
-      return '<div class="round"><div class="rlabel">'+(isR?'Round ':'Set ')+(ri+1)+'</div>'+cells+'</div>';
-    }).join('');
-    const tgt=ex.target?'<div class="extarget">'+esc(ex.target)+'</div>':'';
-    const ls=lastIdx[ex.name.toLowerCase().trim()];
-    const lastLine=ls?'<div class="lastline">Last'+(ls.week?' ('+esc(ls.week)+')':'')+': '+ls.sets.slice(0,5).map(esc).join(' · ')+'</div>':'';
-    return '<div class="excard"><div class="exname"><span class="dot"></span>'+esc(ex.name)+'</div>'+tgt+lastLine+'<div class="rounds">'+rounds+'</div></div>';
+      const tgt=ex.target?'<div class="extarget">'+esc(ex.target)+'</div>':'';
+      const ls=lastIdx[ex.name.toLowerCase().trim()];
+      const lastLine=ls?'<div class="lastline">Last'+(ls.week?' ('+esc(ls.week)+')':'')+': '+ls.sets.slice(0,5).map(esc).join(' · ')+'</div>':'';
+      body='<div class="exbody">'+tgt+lastLine+'<div class="rounds">'+rounds+'</div></div>';
+    }
+    return '<div class="excard exacc'+(open?' open':'')+'">'+header+body+'</div>';
   }).join('') : '<div class="empty">No exercises yet. Tap ✎ Edit to add some.</div>';
   const finisher=day.finisher?'<div class="finisher"><div class="fl">'+mi('flame')+' Finisher</div><div class="ft">'+esc(day.finisher)+'</div></div>':'';
   const scale=scaleNums.map(n=>'<div class="sbtn'+(dl.scale===n?' on':'')+'" data-act="scale" data-day="'+day.id+'" data-n="'+n+'">'+n+'</div>').join('');
@@ -881,6 +890,7 @@ el('screen').addEventListener('click',function(e){
   else if(act==='score'){ const v=ds.val; a.score=a.score.includes(v)?a.score.filter(x=>x!==v):a.score.concat([v]); }
   else if(act==='scale'){ const dl=dayLog(a.log,ds.day),n=+ds.n; dl.scale=dl.scale===n?null:n; }
   else if(act==='rating'){ const dl=dayLog(a.log,ds.day),n=+ds.n; dl.rating=dl.rating===n?0:n; }
+  else if(act==='toggleex'){ openEx[ds.ex]=!openEx[ds.ex]; }
   else if(act==='day'){ state.workoutDay=+ds.i; }
   else if(act==='gotoworkout'){ state.tab='workout'; }
   else if(act==='toggleedit'){ state.ui.edit=!state.ui.edit; state.ui.delSel=[]; }

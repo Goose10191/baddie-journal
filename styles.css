@@ -109,6 +109,16 @@ input::placeholder,textarea::placeholder{color:var(--faint);}
 
 .exlist{display:flex;flex-direction:column;gap:11px;}
 .excard{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:14px;}
+.excard.exacc{padding:0;overflow:hidden;}
+.exacc.open{border-color:var(--border2);}
+.exhead{display:flex;align-items:center;gap:10px;padding:14px;cursor:pointer;-webkit-user-select:none;user-select:none;}
+.exhead .dot{width:6px;height:6px;border-radius:50%;background:var(--red);box-shadow:0 0 8px var(--glow);flex-shrink:0;}
+.exname-txt{flex:1;min-width:0;font-size:15px;font-weight:700;color:#fff;}
+.exprog{font-size:11px;font-weight:800;color:var(--muted);background:var(--card2);border:1px solid var(--border2);border-radius:999px;padding:3px 9px;flex-shrink:0;}
+.exprog.done{color:var(--good);border-color:rgba(46,207,143,.55);}
+.exchev{width:18px;height:18px;color:var(--muted);flex-shrink:0;transition:transform .2s;}
+.exhead.open .exchev{transform:rotate(180deg);}
+.exbody{padding:2px 14px 14px;}
 .exname{font-size:15px;font-weight:700;margin-bottom:11px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:#fff;}
 .exname .dot{width:6px;height:6px;border-radius:50%;background:var(--red);box-shadow:0 0 8px var(--glow);flex-shrink:0;}
 .extarget{font-size:11px;color:#a49c99;font-weight:600;margin:-5px 0 10px;}
