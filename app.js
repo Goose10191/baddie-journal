@@ -228,26 +228,39 @@ function galleryTick(){
   el.style.opacity='0';
   setTimeout(function(){ el.src=imgs[galleryIdx]; el.style.opacity='1'; document.querySelectorAll('.galdot').forEach(function(d,i){ d.classList.toggle('on',i===galleryIdx); }); },180);
 }
-function loadGalleryPhoto(file){
-  if(!file||!/^image\//.test(file.type)){ alert('Please choose an image file.'); return; }
-  const reader=new FileReader();
-  reader.onload=function(e){
-    const img=new Image();
-    img.onload=function(){
-      const MAX=760; let w=img.width,h=img.height; const scale=Math.min(1,MAX/Math.max(w,h)); w=Math.round(w*scale); h=Math.round(h*scale);
-      const c=document.createElement('canvas'); c.width=w; c.height=h; c.getContext('2d').drawImage(img,0,0,w,h);
-      let data; try{ data=c.toDataURL('image/jpeg',0.8); }catch(err){ data=e.target.result; }
-      if(!state.gallery) state.gallery=[];
-      state.gallery.push(data);
-      while(state.gallery.length>12) state.gallery.shift();   // keep it bounded
-      galleryIdx=state.gallery.length-1;
-      if(!persist()){ state.gallery.pop(); alert('Not enough space to save that photo — remove a few first.'); render(); return; }
-      render();
+function processImageFile(file){
+  return new Promise(function(resolve,reject){
+    const reader=new FileReader();
+    reader.onload=function(e){
+      const img=new Image();
+      img.onload=function(){
+        const MAX=760; let w=img.width,h=img.height; const scale=Math.min(1,MAX/Math.max(w,h)); w=Math.round(w*scale); h=Math.round(h*scale);
+        const c=document.createElement('canvas'); c.width=w; c.height=h; c.getContext('2d').drawImage(img,0,0,w,h);
+        let data; try{ data=c.toDataURL('image/jpeg',0.8); }catch(err){ data=e.target.result; }
+        resolve(data);
+      };
+      img.onerror=function(){ reject(); };
+      img.src=e.target.result;
     };
-    img.onerror=function(){ alert('Could not read that image.'); };
-    img.src=e.target.result;
-  };
-  reader.readAsDataURL(file);
+    reader.onerror=function(){ reject(); };
+    reader.readAsDataURL(file);
+  });
+}
+function loadGalleryPhotos(files){
+  const list=[].slice.call(files).filter(function(f){ return f&&/^image\//.test(f.type); });
+  if(!list.length){ alert('Please choose image files.'); return; }
+  Promise.all(list.map(function(f){ return processImageFile(f).catch(function(){ return null; }); })).then(function(datas){
+    if(!state.gallery) state.gallery=[];
+    datas.filter(Boolean).forEach(function(d){ state.gallery.push(d); });
+    while(state.gallery.length>12) state.gallery.shift();   // keep it bounded
+    galleryIdx=state.gallery.length-1;
+    if(!persist()){
+      while(state.gallery.length && !persist()) state.gallery.pop();  // drop until it fits
+      galleryIdx=Math.max(0,state.gallery.length-1);
+      alert('Some photos didn’t fit — storage is limited. Try fewer or smaller photos.');
+    }
+    render();
+  });
 }
 
 /* ================= Plan mutators ================= */
@@ -553,8 +566,8 @@ function screenHome(){
   const goalChips=state.profile.goals.length? state.profile.goals.map(g=>'<div class="chip on">'+esc(g)+'</div>').join('') : '<div class="sub">No goals set yet — add them on the <b class="spark">Me</b> tab.</div>';
   const g=state.gallery||[]; if(galleryIdx>=g.length) galleryIdx=0;
   const galleryHTML = g.length
-    ? '<div class="gallery"><img class="galimg" data-act="galnext" src="'+esc(g[galleryIdx])+'" alt="Gym photo"><button class="galdel" data-act="galdel" aria-label="Delete photo">×</button><label class="galadd"><input type="file" accept="image/*" data-galadd hidden>＋</label>'+(g.length>1?'<div class="galdots">'+g.map(function(_,i){return '<span class="galdot'+(i===galleryIdx?' on':'')+'"></span>';}).join('')+'</div>':'')+'</div>'
-    : '<label class="galempty"><input type="file" accept="image/*" data-galadd hidden><div class="galempty-title">Add gym selfies</div><div class="galempty-sub">Tap to add — your photos rotate here</div></label>';
+    ? '<div class="gallery"><img class="galimg" data-act="galnext" src="'+esc(g[galleryIdx])+'" alt="Gym photo"><button class="galdel" data-act="galdel" aria-label="Delete photo">×</button><label class="galadd"><input type="file" accept="image/*" data-galadd multiple hidden>＋</label>'+(g.length>1?'<div class="galdots">'+g.map(function(_,i){return '<span class="galdot'+(i===galleryIdx?' on':'')+'"></span>';}).join('')+'</div>':'')+'</div>'
+    : '<label class="galempty"><input type="file" accept="image/*" data-galadd multiple hidden><div class="galempty-title">Add gym selfies</div><div class="galempty-sub">Tap to add — your photos rotate here</div></label>';
   const banner=backupStale()?'<div class="banner"><div class="bannertxt">Back up your progress so a lost or reset phone can’t erase it.</div><div class="bannerbtns"><button class="btn sm" data-act="export">Export backup</button><button class="btn ghost sm" data-act="snoozebackup">Later</button></div></div>':'';
   return banner+greeting()
     +'<div class="sub mb">'+(a.week?'Week of '+esc(a.week):todayLabel())+' · Bertram Baddies</div>'
@@ -987,7 +1000,7 @@ el('screen').addEventListener('change',function(e){
   else if(e.target.dataset.avatar!==undefined){ const f=e.target.files&&e.target.files[0]; if(f) loadAvatar(f); }
   else if(e.target.dataset.import!==undefined){ const f=e.target.files&&e.target.files[0]; if(f) importData(f); }
   else if(e.target.dataset.importwo!==undefined){ const f=e.target.files&&e.target.files[0]; if(f) importWorkouts(f); }
-  else if(e.target.dataset.galadd!==undefined){ const f=e.target.files&&e.target.files[0]; if(f) loadGalleryPhoto(f); }
+  else if(e.target.dataset.galadd!==undefined){ if(e.target.files&&e.target.files.length) loadGalleryPhotos(e.target.files); }
 });
 
 el('screen').addEventListener('input',function(e){
